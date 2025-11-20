@@ -1,0 +1,67 @@
+{
+  "date": "2025-11-21",
+  "type": "combat",
+  "name": "Test 21st",
+  "introText": "poop",
+  "successText": "good",
+  "failureText": "bad",
+  "gridWidth": 10,
+  "gridHeight": 8,
+  "tiles": [
+    "##########",
+    "#.......E#",
+    "#...#...E#",
+    "#...#...E#",
+    "#...#...E#",
+    "#...#...E#",
+    "#.......E#",
+    "##########"
+  ],
+  "entities": [
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 5,
+      "y": 2
+    },
+    {
+      "kind": "playerSpawn",
+      "x": 2,
+      "y": 3
+    },
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 6,
+      "y": 3
+    },
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 6,
+      "y": 4
+    },
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 5,
+      "y": 5
+    }
+  ],
+  "puzzleConfig": {
+    "question": "",
+    "options": [
+      "A",
+      "B",
+      "C"
+    ],
+    "answer": 0
+  },
+  "trapConfig": {
+    "dc": 12,
+    "damage": 5
+  },
+  "bossConfig": {
+    "name": "The Hollow Knight"
+  }
+}

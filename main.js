@@ -567,8 +567,7 @@ function handleMove(dir) {
   if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
-  enemyTurn();
-  renderGrid();
+  advanceEnemiesAfterPlayerAction();
 }
 
 function inBounds(x,y){
@@ -589,10 +588,11 @@ function resolveCombat(enemy) {
     if (hasPassive('Bloodthirst')) player.stats.hpCurrent = Math.min(player.stats.hpMax, player.stats.hpCurrent + 2);
     renderGrid();
     if (state.currentRoom.type === 'boss' && !state.entities.some((e) => e.kind==='boss')) log('Boss defeated!');
+    advanceEnemiesAfterPlayerAction();
     return;
   }
   enemyAttack(enemy);
-  renderGrid();
+  advanceEnemiesAfterPlayerAction();
 }
 
 function enemyAttack(enemy) {
@@ -606,6 +606,7 @@ function enemyAttack(enemy) {
     onFailure();
   }
   renderStatus();
+  savePlayer();
 }
 
 function enemyTurn() {
@@ -622,6 +623,14 @@ function enemyTurn() {
       enemyAttack(enemy);
     }
   });
+}
+
+function advanceEnemiesAfterPlayerAction() {
+  if (!state.player || state.player.stats.hpCurrent <= 0) return;
+  enemyTurn();
+  renderGrid();
+  renderStatus();
+  savePlayer();
 }
 
 function attemptMove(ent, pos) {
@@ -673,8 +682,13 @@ function openPuzzle(ent) {
     content.querySelectorAll('button').forEach((b)=>b.onclick=()=>choose(parseInt(b.dataset.i)));
   }
   function choose(i) {
-    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; return; }
-    if (i === config.answer) finish(true); else { attempts--; if (attempts<=0) finish(false); else render(); }
+    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; advanceEnemiesAfterPlayerAction(); return; }
+    if (i === config.answer) { finish(true); advanceEnemiesAfterPlayerAction(); }
+    else {
+      attempts--;
+      if (attempts<=0) { finish(false); advanceEnemiesAfterPlayerAction(); }
+      else { advanceEnemiesAfterPlayerAction(); render(); }
+    }
   }
   function finish(success) {
     modal.classList.add('hidden');
@@ -737,7 +751,8 @@ function triggerTrap(x,y){
     }
     renderStatus();
     renderGrid();
-    if (state.player.stats.hpCurrent>0){ enemyTurn(); renderGrid(); }
+    savePlayer();
+    if (state.player.stats.hpCurrent>0){ advanceEnemiesAfterPlayerAction(); }
   }
   render();
 }

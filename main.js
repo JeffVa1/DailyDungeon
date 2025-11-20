@@ -112,6 +112,44 @@ let state = {
   combatLog: [],
 };
 
+function normalizeRoom(room) {
+  const copy = JSON.parse(JSON.stringify(room));
+  copy.puzzleConfigs = copy.puzzleConfigs || [];
+  copy.trapConfigs = copy.trapConfigs || [];
+
+  const tiles = copy.tiles || [];
+  const puzzleCoords = [];
+  const trapCoords = [];
+  tiles.forEach((row, y) => {
+    row.split('').forEach((ch, x) => {
+      if (ch === 'S') puzzleCoords.push({ x, y });
+      if (ch === 'T') trapCoords.push({ x, y });
+    });
+  });
+
+  if (!copy.puzzleConfigs.length && copy.puzzleConfig) {
+    const fallback = (copy.entities || []).find((e) => e.kind === 'puzzle') || puzzleCoords[0];
+    if (fallback) copy.puzzleConfigs.push({ x: fallback.x, y: fallback.y, ...copy.puzzleConfig });
+  }
+  if (!copy.trapConfigs.length && copy.trapConfig) {
+    const fallback = trapCoords[0];
+    if (fallback) copy.trapConfigs.push({ x: fallback.x, y: fallback.y, ...copy.trapConfig });
+  }
+
+  puzzleCoords.forEach((p) => {
+    if (!copy.puzzleConfigs.some((c) => c.x === p.x && c.y === p.y)) {
+      copy.puzzleConfigs.push({ x: p.x, y: p.y, question: 'Solve: 2+2?', options: ['1', '3', '4'], answer: 2 });
+    }
+  });
+  trapCoords.forEach((t) => {
+    if (!copy.trapConfigs.some((c) => c.x === t.x && c.y === t.y)) {
+      copy.trapConfigs.push({ x: t.x, y: t.y, dc: 12, damage: 5, intro: 'A trap springs!' });
+    }
+  });
+
+  return copy;
+}
+
 function getNextWeekdayDate(name) {
   const target = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(name);
   const now = new Date();
@@ -312,7 +350,8 @@ async function renderDungeonPanel() {
     <div id="dungeonContent">Loading room...</div>
   </div>`;
   const targetDate = state.owner ? state.selectedDate : todayStr;
-  const room = await getRoomForDate(targetDate);
+  const rawRoom = await getRoomForDate(targetDate);
+  const room = rawRoom ? normalizeRoom(rawRoom) : null;
   const content = qs('#dungeonContent');
   if (qs('#playDate')) {
     qs('#playDate').onchange = (e) => {
@@ -471,7 +510,9 @@ function handleMove(dir) {
   state.playerPos = { x: nx, y: ny };
   const playerEntity = state.entities.find((e) => e.kind === 'player');
   if (playerEntity) { playerEntity.x = nx; playerEntity.y = ny; }
+  if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
+  if (tile === 'E') return tryExit();
   enemyTurn();
   renderGrid();
 }
@@ -545,10 +586,25 @@ function tryExit() {
   onSuccess();
 }
 
+function getPuzzleConfigAt(x, y) {
+  return (state.currentRoom?.puzzleConfigs || []).find((p) => p.x === x && p.y === y);
+}
+
+function getTrapConfigAt(x, y) {
+  return (state.currentRoom?.trapConfigs || []).find((t) => t.x === x && t.y === y);
+}
+
 function openPuzzle(ent) {
   const target = ent || state.entities.find((e)=>e.kind==='puzzle' && e.x===state.playerPos.x && e.y===state.playerPos.y);
-  if (!target) return;
-  const config = state.currentRoom.puzzleConfig || { question:'Solve: 2+2?', options:['1','3','4'], answer:2 };
+  const pos = target || { x: state.playerPos.x, y: state.playerPos.y };
+  if (!pos) return;
+  const config = getPuzzleConfigAt(pos.x, pos.y);
+  if (!config) {
+    if (state.grid[pos.y]?.[pos.x] === 'S') {
+      log('This puzzle needs a configuration.');
+    }
+    return;
+  }
   let attempts = 3;
   const modal = qs('#modal');
   const content = qs('#modalContent');
@@ -580,6 +636,9 @@ function openPuzzle(ent) {
 function clearPuzzleTile(x,y){
   state.grid[y][x]='.';
   state.entities = state.entities.filter((e)=>!(e.kind==='puzzle' && e.x===x && e.y===y));
+  if (state.currentRoom?.puzzleConfigs) {
+    state.currentRoom.puzzleConfigs = state.currentRoom.puzzleConfigs.filter((p)=>!(p.x===x && p.y===y));
+  }
   renderGrid();
 }
 
@@ -592,7 +651,7 @@ function hasPassive(name){
 }
 
 function triggerTrap(x,y){
-  const config = state.currentRoom.trapConfig || { dc: 12, damage: 5, intro: 'A trap springs!' };
+  const config = getTrapConfigAt(x, y) || { dc: 12, damage: 5, intro: 'A trap springs!' };
   const modal = qs('#modal');
   const content = qs('#modalContent');
   const approaches = [
@@ -907,26 +966,61 @@ function updateEditorCell(cell, key){
 function renderExtraConfig(){
   const box = qs('#extraConfig');
   box.innerHTML = `
-    <label>Puzzle Question<input id="edPuzzleQ"></label>
-    <label>Puzzle Answer<input id="edPuzzleA"></label>
-    <label>Trap DC<input id="edTrapDC" type="number" value="12"></label>
-    <label>Trap Damage<input id="edTrapDmg" type="number" value="5"></label>
+    <div class="config-group">
+      <div class="config-header"><strong>Puzzles</strong> <button id="addPuzzle">Add Puzzle</button></div>
+      <div id="puzzleList"></div>
+    </div>
+    <div class="config-group">
+      <div class="config-header"><strong>Traps</strong> <button id="addTrap">Add Trap</button></div>
+      <div id="trapList"></div>
+    </div>
     <label>Boss Type<select id="edBoss">${BOSSES.map((b)=>`<option value="${b}">${b}</option>`).join('')}</select></label>
   `;
+  qs('#addPuzzle').onclick = () => addPuzzleConfigRow();
+  qs('#addTrap').onclick = () => addTrapConfigRow();
+}
+
+function addPuzzleConfigRow(data={}){
+  const list = qs('#puzzleList');
+  const row = document.createElement('div');
+  row.className = 'config-row';
+  row.innerHTML = `
+    <label>X<input type="number" class="puz-x" value="${data.x ?? 0}" min="0"></label>
+    <label>Y<input type="number" class="puz-y" value="${data.y ?? 0}" min="0"></label>
+    <label>Question<input class="puz-q" value="${data.question || ''}"></label>
+    <label>Options (comma list)<input class="puz-opt" value="${(data.options||['A','B','C']).join(',')}"></label>
+    <label>Answer Index<input type="number" class="puz-ans" value="${data.answer ?? 0}" min="0"></label>
+    <button class="remove-row">Remove</button>
+  `;
+  row.querySelector('.remove-row').onclick = ()=>row.remove();
+  list.appendChild(row);
+}
+
+function addTrapConfigRow(data={}){
+  const list = qs('#trapList');
+  const row = document.createElement('div');
+  row.className = 'config-row';
+  row.innerHTML = `
+    <label>X<input type="number" class="trap-x" value="${data.x ?? 0}" min="0"></label>
+    <label>Y<input type="number" class="trap-y" value="${data.y ?? 0}" min="0"></label>
+    <label>Intro<input class="trap-intro" value="${data.intro || ''}"></label>
+    <label>DC<input type="number" class="trap-dc" value="${data.dc ?? 12}" min="1"></label>
+    <label>Damage<input type="number" class="trap-dmg" value="${data.damage ?? 5}" min="0"></label>
+    <button class="remove-row">Remove</button>
+  `;
+  row.querySelector('.remove-row').onclick = ()=>row.remove();
+  list.appendChild(row);
 }
 
 async function loadEditorRoom(date){
   const room = await getRoomForDate(date);
   if (room) {
+    const normalized = normalizeRoom(room);
     qs('#edType').value = room.type;
     qs('#edName').value = room.name;
     qs('#edIntro').value = room.introText;
     qs('#edSuccess').value = room.successText;
     qs('#edFailure').value = room.failureText;
-    qs('#edPuzzleQ').value = room.puzzleConfig?.question || '';
-    qs('#edPuzzleA').value = room.puzzleConfig?.answer ?? '';
-    qs('#edTrapDC').value = room.trapConfig?.dc ?? 12;
-    qs('#edTrapDmg').value = room.trapConfig?.damage ?? 5;
     qs('#edBoss').value = room.bossConfig?.name || BOSSES[0];
     const tileGrid = room.tiles.map((row)=>row.split(''));
     room.entities.forEach((ent)=>{
@@ -935,14 +1029,20 @@ async function loadEditorRoom(date){
       if (ent.kind==='boss') tileGrid[ent.y][ent.x]='B';
     });
     buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','G','B'].includes(c)?c:'.')));
+    const puzzleList = qs('#puzzleList');
+    const trapList = qs('#trapList');
+    puzzleList.innerHTML='';
+    trapList.innerHTML='';
+    normalized.puzzleConfigs.forEach((p)=>addPuzzleConfigRow(p));
+    normalized.trapConfigs.forEach((t)=>addTrapConfigRow(t));
   } else {
     buildEditorGrid();
     qs('#edName').value = '';
     qs('#edIntro').value = '';
     qs('#edSuccess').value = '';
     qs('#edFailure').value = '';
-    qs('#edPuzzleQ').value = '';
-    qs('#edPuzzleA').value = '';
+    qs('#puzzleList').innerHTML='';
+    qs('#trapList').innerHTML='';
   }
   qs('#edDate').value = date;
 }
@@ -962,6 +1062,22 @@ function saveEditorRoom(){
     if (cell==='P') entities.push({ kind:'playerSpawn', x,y });
     if (cell==='G') entities.push({ kind:'enemy', enemyType:'Goblin Cutthroat', x,y });
     if (cell==='B') entities.push({ kind:'boss', bossType: qs('#edBoss').value, x,y });
+    if (cell==='E') entities.push({ kind:'exit', x, y });
+    if (cell==='S') entities.push({ kind:'puzzle', x, y });
+  }));
+  const puzzleConfigs = Array.from(qs('#puzzleList').children).map((row)=>({
+    x: parseInt(row.querySelector('.puz-x').value,10)||0,
+    y: parseInt(row.querySelector('.puz-y').value,10)||0,
+    question: row.querySelector('.puz-q').value,
+    options: (row.querySelector('.puz-opt').value || 'A,B,C').split(',').map((s)=>s.trim()).filter(Boolean),
+    answer: parseInt(row.querySelector('.puz-ans').value,10)||0,
+  }));
+  const trapConfigs = Array.from(qs('#trapList').children).map((row)=>({
+    x: parseInt(row.querySelector('.trap-x').value,10)||0,
+    y: parseInt(row.querySelector('.trap-y').value,10)||0,
+    intro: row.querySelector('.trap-intro').value,
+    dc: parseInt(row.querySelector('.trap-dc').value,10)||12,
+    damage: parseInt(row.querySelector('.trap-dmg').value,10)||5,
   }));
   const room = {
     date,
@@ -974,10 +1090,12 @@ function saveEditorRoom(){
     gridHeight: height,
     tiles: grid.map((row)=>row.map((c)=>['P','G','B'].includes(c)?'.':c).join('')),
     entities,
-    puzzleConfig: { question: qs('#edPuzzleQ').value, options:['A','B','C'], answer: 0 },
-    trapConfig: { dc: parseInt(qs('#edTrapDC').value,10), damage: parseInt(qs('#edTrapDmg').value,10) },
+    puzzleConfigs,
+    trapConfigs,
     bossConfig: { name: qs('#edBoss').value }
   };
+  if (puzzleConfigs.length) room.puzzleConfig = puzzleConfigs[0];
+  if (trapConfigs.length) room.trapConfig = trapConfigs[0];
   const rooms = getOwnerRooms();
   rooms[date]=room; saveOwnerRooms(rooms);
   persistRoomToFile(room);

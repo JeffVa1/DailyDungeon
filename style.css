@@ -1,6 +1,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; color: #f4f4f4; background: #0d0d14; }
 #app { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+#game-root { touch-action: none; user-select: none; -webkit-user-select: none; }
 .top-bar { display: flex; align-items: center; justify-content: space-between; background: #161623; padding: 10px 16px; gap: 12px; border-bottom: 1px solid #22263f; }
 .title { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
 .today { opacity: 0.8; }
@@ -32,6 +33,8 @@ textarea { min-height: 70px; }
 .tile-floor { background: #1c1f35; }
 .tile-wall { background: #44475a; }
 .tile-obstacle { background: #3a2e2e; }
+.tile-key { background: radial-gradient(circle at 30% 30%, #ffd95e, #d4a018); color: #1a1200; }
+.tile-locked { background: linear-gradient(135deg, #3a3f56, #252a3f); }
 .tile-exit { background: #2e5a3a; }
 .tile-trap { background: #5a2e2e; }
 .tile-puzzle { background: #2e3a5a; }

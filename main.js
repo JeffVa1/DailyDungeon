@@ -111,6 +111,7 @@ let state = {
   grid: [],
   entities: [],
   playerPos: { x: 0, y: 0 },
+  keys: 0,
   activeTab: 'dungeon',
   owner: ownerMode,
   combatLog: [],
@@ -522,19 +523,21 @@ async function renderDungeonPanel() {
   }
 
   state.currentRoom = JSON.parse(JSON.stringify(room));
+  state.keys = 0;
   state.grid = buildGrid(room);
   initEntities(room);
   content.innerHTML = `
-      <h2>${room.name}</h2>
-      <p class="small">${room.introText}</p>
-      <div id="roomGrid" class="grid"></div>
-      <div class="status-row" id="statusRow"></div>
-      <div id="log" class="small"></div>
-      <div class="dpad" id="dpad"></div>
+      <div id="game-root" class="game-root">
+        <h2>${room.name}</h2>
+        <p class="small">${room.introText}</p>
+        <div id="roomGrid" class="grid"></div>
+        <div class="status-row" id="statusRow"></div>
+        <div id="log" class="small"></div>
+      </div>
     `;
   renderGrid();
   renderStatus();
-  renderDpad();
+  setupSwipeControls();
   state.combatLog = [];
   setActionBar();
 }
@@ -582,10 +585,10 @@ function renderGrid() {
         cell.className = 'label-cell corner';
       } else if (y === -1) {
         cell.className = 'label-cell column-label';
-        cell.textContent = x + 1;
+        cell.textContent = x;
       } else if (x === -1) {
         cell.className = 'label-cell row-label';
-        cell.textContent = y + 1;
+        cell.textContent = y;
       } else {
         const tile = state.grid[y][x];
         cell.classList.add('cell');
@@ -595,6 +598,8 @@ function renderGrid() {
         else if (tile === 'S') cell.classList.add('tile-puzzle');
         else if (tile === 'T') cell.classList.add('tile-trap');
         else if (tile === 'O') cell.classList.add('tile-obstacle');
+        else if (tile === 'K') cell.classList.add('tile-key');
+        else if (tile === 'L') cell.classList.add('tile-locked');
         else if (tile === 'E') cell.classList.add('tile-exit');
         else cell.classList.add('tile-floor');
         if (ent) cell.classList.add(entityClass(ent));
@@ -649,6 +654,7 @@ function renderStatus() {
       <div>${player.name} (Lv ${player.level} ${player.class})</div>
       <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / (derived.hpMax || 1)) * 100}%"></div></div>
       <div class="small">ATK ${derived.attack} | DEF ${derived.defense} | CRIT ${derived.critChance}%</div>
+      <div class="small">Keys: ${state.keys}</div>
     </div>`;
 }
 
@@ -701,15 +707,103 @@ function initControls() {
   });
 }
 
+// Attach swipe gestures to the main game container for touch input.
+function setupSwipeControls() {
+  const root = qs('#game-root');
+  if (!root || root.dataset.swipeAttached) return;
+
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+  const minDistance = 30; // px
+
+  root.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      tracking = true;
+    },
+    { passive: true }
+  );
+
+  root.addEventListener(
+    'touchend',
+    (e) => {
+      if (!tracking) return;
+      tracking = false;
+
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (Math.max(absX, absY) < minDistance) return;
+
+      const direction =
+        absX > absY
+          ? dx > 0
+            ? 'right'
+            : 'left'
+          : dy > 0
+          ? 'down'
+          : 'up';
+
+      handleMove(direction);
+    },
+    { passive: true }
+  );
+
+  root.dataset.swipeAttached = '1';
+}
+
 function handleMove(dir) {
   if (!state.currentRoom) return;
-  const delta = { w: [0,-1], s: [0,1], a: [-1,0], d: [1,0] }[dir];
+
+  const normalized = (dir || '').toLowerCase();
+  const delta = {
+    // keyboard
+    w: [0, -1],
+    s: [0, 1],
+    a: [-1, 0],
+    d: [1, 0],
+    arrowup: [0, -1],
+    arrowdown: [0, 1],
+    arrowleft: [-1, 0],
+    arrowright: [1, 0],
+    // swipe directions
+    up: [0, -1],
+    down: [0, 1],
+    left: [-1, 0],
+    right: [1, 0],
+  }[normalized];
+
   if (!delta) return;
   const nx = state.playerPos.x + delta[0];
   const ny = state.playerPos.y + delta[1];
   if (!inBounds(nx, ny)) return;
   const tile = state.grid[ny][nx];
-  if (['#','O'].includes(tile)) return;
+  if (tile === '#') return;
+  if (tile === 'O') {
+    const pushX = nx + delta[0];
+    const pushY = ny + delta[1];
+    const blockingTiles = ['#', 'O', 'E', 'S', 'T', 'L', 'K'];
+    if (!inBounds(pushX, pushY)) return;
+    const nextTile = state.grid[pushY][pushX];
+    const blockedByEntity = state.entities.some((e) => e.kind !== 'player' && e.x === pushX && e.y === pushY);
+    if (blockingTiles.includes(nextTile) || blockedByEntity) return;
+    state.grid[pushY][pushX] = 'O';
+    state.grid[ny][nx] = '.';
+  }
+  if (tile === 'L') {
+    if (state.keys <= 0) { log('The door is locked. You need a key.'); return; }
+    state.keys -= 1;
+    state.grid[ny][nx] = '.';
+    log('You unlock the door.');
+  }
   const ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
   if (ent) {
     if (['enemy','boss'].includes(ent.kind) && state.effects.escape) {
@@ -724,6 +818,11 @@ function handleMove(dir) {
   state.playerPos = { x: nx, y: ny };
   const playerEntity = state.entities.find((e) => e.kind === 'player');
   if (playerEntity) { playerEntity.x = nx; playerEntity.y = ny; }
+  if (tile === 'K') {
+    state.keys += 1;
+    state.grid[ny][nx] = '.';
+    log('You pick up a key.');
+  }
   if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
@@ -810,7 +909,7 @@ function advanceEnemiesAfterPlayerAction() {
 function attemptMove(ent, pos) {
   if (!inBounds(pos.x,pos.y)) return false;
   const tile = state.grid[pos.y][pos.x];
-  if (['#','O','E','S','T'].includes(tile)) return false;
+  if (['#','O','E','S','T','L'].includes(tile)) return false;
   if (state.entities.some((e) => e!==ent && e.x === pos.x && e.y === pos.y)) return false;
   ent.x = pos.x; ent.y = pos.y; return true;
 }
@@ -1222,6 +1321,7 @@ function renderEditorPanel(){
   buildPalette();
   buildEditorGrid();
   renderExtraConfig();
+  syncBossSelector();
   const widthInput = qs('#edWidth');
   const heightInput = qs('#edHeight');
   if (widthInput) widthInput.addEventListener('change', resizeEditorGridFromInputs);
@@ -1237,6 +1337,8 @@ function buildPalette(){
     { key: '.', label:'Floor' },
     { key: '#', label:'Wall' },
     { key: 'O', label:'Obstacle' },
+    { key: 'K', label:'Key' },
+    { key: 'L', label:'Locked Door' },
     { key: 'E', label:'Exit' },
     { key: 'T', label:'Trap' },
     { key: 'S', label:'Puzzle' },
@@ -1271,10 +1373,10 @@ function buildEditorGrid(prefill){
       cell.className='label-cell corner';
     } else if (y===-1) {
       cell.className='label-cell column-label';
-      cell.textContent = x+1;
+      cell.textContent = x;
     } else if (x===-1) {
       cell.className='label-cell row-label';
-      cell.textContent = y+1;
+      cell.textContent = y;
     } else {
       cell.dataset.x=x; cell.dataset.y=y;
       updateEditorCell(cell, grid[y][x]);
@@ -1283,11 +1385,13 @@ function buildEditorGrid(prefill){
         grid[y][x]=key;
         updateEditorCell(cell, key);
         g.dataset.grid = JSON.stringify(grid);
+        syncBossSelector();
       };
     }
     g.appendChild(cell);
   }
   g.dataset.grid = JSON.stringify(grid);
+  syncBossSelector();
 }
 
 function resizeEditorGridFromInputs(){
@@ -1301,14 +1405,29 @@ function resizeEditorGridFromInputs(){
 }
 
 function updateEditorCell(cell, key){
-  cell.textContent=key==='P'?'P': key==='G'?'G': key==='B'?'B':'';
+  cell.textContent=key==='P'?'P': key==='G'?'G': key==='B'?'B': key==='K'?'K': key==='L'?'L':'';
   cell.className='cell';
   if (key==='#') cell.classList.add('tile-wall');
   else if (key==='O') cell.classList.add('tile-obstacle');
   else if (key==='E') cell.classList.add('tile-exit');
   else if (key==='T') cell.classList.add('tile-trap');
   else if (key==='S') cell.classList.add('tile-puzzle');
+  else if (key==='K') cell.classList.add('tile-key');
+  else if (key==='L') cell.classList.add('tile-locked');
   else cell.classList.add('tile-floor');
+}
+
+function editorHasBoss(){
+  const grid = gatherEditorGrid();
+  return grid.some((row)=>row.some((c)=>c==='B'));
+}
+
+function syncBossSelector(){
+  const select = qs('#edBoss');
+  if (!select) return;
+  const enabled = editorHasBoss();
+  select.disabled = !enabled;
+  select.title = enabled ? '' : 'Place a boss tile to choose a boss type.';
 }
 
 function renderExtraConfig(){
@@ -1376,7 +1495,7 @@ async function loadEditorRoom(date){
       if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='G';
       if (ent.kind==='boss') tileGrid[ent.y][ent.x]='B';
     });
-    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','G','B'].includes(c)?c:'.')));
+    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','G','B','K','L'].includes(c)?c:'.')));
     const puzzleList = qs('#puzzleList');
     const trapList = qs('#trapList');
     puzzleList.innerHTML='';
@@ -1405,10 +1524,11 @@ function saveEditorRoom(){
   const width = grid[0]?.length || 10;
   const height = grid.length || 8;
   const entities = [];
+  let hasBoss = false;
   grid.forEach((row,y)=>row.forEach((cell,x)=>{
     if (cell==='P') entities.push({ kind:'playerSpawn', x,y });
     if (cell==='G') entities.push({ kind:'enemy', enemyType:'Goblin Cutthroat', x,y });
-    if (cell==='B') entities.push({ kind:'boss', bossType: qs('#edBoss').value, x,y });
+    if (cell==='B') { hasBoss = true; entities.push({ kind:'boss', bossType: qs('#edBoss').value, x,y }); }
     if (cell==='E') entities.push({ kind:'exit', x, y });
     if (cell==='S') entities.push({ kind:'puzzle', x, y });
   }));
@@ -1439,7 +1559,7 @@ function saveEditorRoom(){
     entities,
     puzzleConfigs,
     trapConfigs,
-    bossConfig: { name: qs('#edBoss').value }
+    bossConfig: hasBoss ? { name: qs('#edBoss').value } : undefined
   };
   if (puzzleConfigs.length) room.puzzleConfig = puzzleConfigs[0];
   if (trapConfigs.length) room.trapConfig = trapConfigs[0];

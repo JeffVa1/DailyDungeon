@@ -46,6 +46,7 @@ textarea { min-height: 70px; }
 .status-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .bottom-bar { padding: 8px; background: #161623; border-top: 1px solid #22263f; min-height: 48px; display: flex; align-items: center; gap: 8px; }
 .bottom-bar button { padding: 10px 14px; background: #242742; color: #fff; border: 1px solid #30324f; border-radius: 8px; cursor: pointer; }
+.tab-btn, .bottom-bar button, .dpad button { touch-action: manipulation; }
 .map-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .calendar-cell { text-align: center; padding: 8px 6px; border-radius: 6px; background: #111423; border: 1px solid #22263f; }
 .calendar-cell.today { border-color: #8ab4f8; }
@@ -91,3 +92,16 @@ legend { padding: 0 6px; }
 .outcome-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .nested-row { gap: 6px; }
 .stat-divider { border-top: 1px solid #2c2f4b; margin: 6px 0; }
+
+@media (max-width: 720px) {
+  .top-bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .tabs { width: 100%; overflow-x: auto; padding-bottom: 4px; }
+  .tab-btn { flex: 1 1 auto; min-width: 92px; font-size: 14px; }
+  .panel { padding: 10px; }
+  .status-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  #roomGrid { margin: 0 auto; }
+  .bottom-bar { flex-wrap: wrap; justify-content: center; }
+  .dpad { width: min(320px, 100%); grid-template-columns: repeat(3, minmax(68px, 1fr)); grid-template-rows: repeat(3, 68px); gap: 10px; margin: 12px auto 0; }
+  .dpad button { font-size: 18px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+  .modal-content { width: 95%; }
+}

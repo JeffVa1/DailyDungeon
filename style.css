@@ -1,0 +1,58 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; color: #f4f4f4; background: #0d0d14; }
+#app { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+.top-bar { display: flex; align-items: center; justify-content: space-between; background: #161623; padding: 10px 16px; gap: 12px; border-bottom: 1px solid #22263f; }
+.title { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+.today { opacity: 0.8; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab-btn { background: #1f2034; border: 1px solid #30324f; color: #f4f4f4; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+.tab-btn.active { background: #3a3f75; }
+.tab-btn:hover { background: #2a2d4f; }
+.owner-only { display: none; }
+.panel { flex: 1; overflow: auto; padding: 12px; }
+.tab-panel { display: none; height: 100%; }
+.tab-panel.active { display: block; }
+.section-card { background: #161623; border: 1px solid #262944; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.section-card h2 { margin-top: 0; }
+.button-row { display: flex; gap: 8px; flex-wrap: wrap; }
+input, select, textarea { background: #0f1020; border: 1px solid #30324f; color: #f4f4f4; padding: 8px; border-radius: 6px; width: 100%; }
+label { font-weight: 600; display: block; margin-bottom: 4px; }
+textarea { min-height: 70px; }
+.grid { display: grid; gap: 2px; background: #0b0b16; padding: 8px; border-radius: 8px; border: 1px solid #20223a; margin-top: 8px; max-width: 100%; }
+.cell { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px; }
+.tile-floor { background: #1c1f35; }
+.tile-wall { background: #44475a; }
+.tile-obstacle { background: #3a2e2e; }
+.tile-exit { background: #2e5a3a; }
+.tile-trap { background: #5a2e2e; }
+.tile-puzzle { background: #2e3a5a; }
+.tile-decoration { background: #293143; }
+.entity-player { background: #3f7fbf; }
+.entity-enemy { background: #bf4b3f; }
+.entity-boss { background: #bf3fb2; }
+.entity-npc { background: #3fbf8f; }
+.entity-spawn { outline: 2px solid #f0e68c; }
+.health-bar { height: 10px; background: #333; border-radius: 6px; overflow: hidden; margin: 4px 0; }
+.health-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #9be15d); }
+.status-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.bottom-bar { padding: 8px; background: #161623; border-top: 1px solid #22263f; min-height: 48px; display: flex; align-items: center; gap: 8px; }
+.bottom-bar button { padding: 10px 14px; background: #242742; color: #fff; border: 1px solid #30324f; border-radius: 8px; cursor: pointer; }
+.map-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.calendar-cell { text-align: center; padding: 8px 6px; border-radius: 6px; background: #111423; border: 1px solid #22263f; }
+.calendar-cell.today { border-color: #8ab4f8; }
+.calendar-cell.complete { background: #1f3a2f; }
+.calendar-cell.failed { background: #3a1f1f; }
+.dpad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); gap: 6px; justify-content: center; margin-top: 8px; }
+.dpad button { background: #242742; border: 1px solid #30324f; color: #fff; border-radius: 8px; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; }
+.modal.hidden { display: none; }
+.modal-content { background: #161623; padding: 16px; border-radius: 12px; max-width: 640px; width: 90%; border: 1px solid #30324f; }
+.loot-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.loot-card { background: #0f1020; padding: 12px; border-radius: 10px; border: 1px solid #30324f; cursor: pointer; }
+.loot-card:hover { border-color: #6a6fd1; }
+.palette { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.palette button { padding: 6px 10px; background: #242742; border: 1px solid #30324f; color: #fff; border-radius: 6px; cursor: pointer; }
+fieldset { border: 1px solid #2d3050; border-radius: 8px; padding: 8px; margin-top: 8px; }
+legend { padding: 0 6px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.small { opacity: 0.8; font-size: 12px; }

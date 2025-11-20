@@ -533,12 +533,10 @@ async function renderDungeonPanel() {
         <div id="roomGrid" class="grid"></div>
         <div class="status-row" id="statusRow"></div>
         <div id="log" class="small"></div>
-        <div class="dpad" id="dpad"></div>
       </div>
     `;
   renderGrid();
   renderStatus();
-  renderDpad();
   setupSwipeControls();
   state.combatLog = [];
   setActionBar();

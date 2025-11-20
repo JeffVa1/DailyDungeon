@@ -118,17 +118,18 @@ let state = {
 };
 
 async function fetchJsonWithFallback(path) {
+  const url = resolveAssetUrl(path);
   try {
-    const res = await fetch(path, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store' });
     if (res.ok) return await res.json();
   } catch (err) {
-    console.warn('Fetch failed, trying XHR for', path, err);
+    console.warn('Fetch failed, trying XHR for', url, err);
   }
   return new Promise((resolve, reject) => {
     try {
       const xhr = new XMLHttpRequest();
       xhr.overrideMimeType('application/json');
-      xhr.open('GET', path, true);
+      xhr.open('GET', url, true);
       xhr.onload = () => {
         if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
           try { resolve(JSON.parse(xhr.responseText || 'null')); }
@@ -303,15 +304,34 @@ function getRoomFilename(date) {
 
 async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
+  const url = resolveAssetUrl(filename);
   const saved = getSavedRoomFiles();
-  if (saved[filename]) return saved[filename];
   try {
-    const data = await fetchJsonWithFallback(filename);
-    if (data) return data;
+    const data = await fetchJsonWithFallback(url);
+    if (data) {
+      saved[filename] = data;
+      saveRoomFiles(saved);
+      return data;
+    }
   } catch (err) {
-    console.warn('Room fetch failed for', filename, err);
+    console.warn('Room fetch failed for', url, err);
   }
-  return null;
+  return saved[filename] || null;
+}
+
+function resolveAssetUrl(path) {
+  try {
+    const base = document.querySelector('base')?.href;
+    if (base) return new URL(path, base).toString();
+    const { origin, pathname } = window.location;
+    const dirPath = pathname.endsWith('/')
+      ? pathname
+      : pathname.substring(0, pathname.lastIndexOf('/') + 1);
+    return new URL(path, `${origin}${dirPath}`).toString();
+  } catch (err) {
+    console.warn('Failed to resolve asset URL for', path, err);
+    return path;
+  }
 }
 
 function persistRoomToFile(room) {

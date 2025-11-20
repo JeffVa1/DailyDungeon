@@ -585,7 +585,6 @@ function resolveCombat(enemy) {
   log(`${player.name} hits ${enemy.enemyType || enemy.kind} for ${dealt}${crit?' (CRIT)':''}.`);
   if (enemy.hp <= 0) {
     state.entities = state.entities.filter((e) => e !== enemy);
-    if (hasPassive('Bloodthirst')) player.stats.hpCurrent = Math.min(player.stats.hpMax, player.stats.hpCurrent + 2);
     renderGrid();
     if (state.currentRoom.type === 'boss' && !state.entities.some((e) => e.kind==='boss')) log('Boss defeated!');
     advanceEnemiesAfterPlayerAction();
@@ -610,16 +609,26 @@ function enemyAttack(enemy) {
 }
 
 function enemyTurn() {
-  state.entities.filter((e)=>['enemy','boss'].includes(e.kind)).forEach((enemy) => {
+  const foes = state.entities.filter((e)=>['enemy','boss'].includes(e.kind));
+  foes.forEach((enemy) => {
+    if (state.player.stats.hpCurrent <= 0) return;
     const dx = state.playerPos.x - enemy.x;
     const dy = state.playerPos.y - enemy.y;
+    const dist = Math.abs(dx) + Math.abs(dy);
+    if (dist <= 1) {
+      enemyAttack(enemy);
+      return;
+    }
     const stepX = dx===0?0:dx/Math.abs(dx);
     const stepY = dy===0?0:dy/Math.abs(dy);
     const tryX = {x: enemy.x + stepX, y: enemy.y};
     const tryY = {x: enemy.x, y: enemy.y + stepY};
     if (Math.abs(dx) > Math.abs(dy)) attemptMove(enemy, tryX) || attemptMove(enemy, tryY);
     else attemptMove(enemy, tryY) || attemptMove(enemy, tryX);
-    if (enemy.x === state.playerPos.x && enemy.y === state.playerPos.y) {
+    const newDx = state.playerPos.x - enemy.x;
+    const newDy = state.playerPos.y - enemy.y;
+    const newDist = Math.abs(newDx) + Math.abs(newDy);
+    if (newDist <= 1) {
       enemyAttack(enemy);
     }
   });
@@ -867,7 +876,7 @@ function levelUp(){
   state.player.level += 1;
   state.player.xp = 0;
   state.player.stats.hpMax += 3;
-  state.player.stats.hpCurrent = state.player.stats.hpMax;
+  state.player.stats.hpCurrent = Math.min(state.player.stats.hpCurrent, state.player.stats.hpMax);
   state.player.stats.attack += 1;
   state.player.stats.defense += 1;
   if (state.player.class === 'Mage') state.player.stats.magic += 1;

@@ -32,6 +32,8 @@ textarea { min-height: 70px; }
 .tile-floor { background: #1c1f35; }
 .tile-wall { background: #44475a; }
 .tile-obstacle { background: #3a2e2e; }
+.tile-key { background: radial-gradient(circle at 30% 30%, #ffd95e, #d4a018); color: #1a1200; }
+.tile-locked { background: linear-gradient(135deg, #3a3f56, #252a3f); }
 .tile-exit { background: #2e5a3a; }
 .tile-trap { background: #5a2e2e; }
 .tile-puzzle { background: #2e3a5a; }

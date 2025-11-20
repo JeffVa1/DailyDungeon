@@ -95,9 +95,9 @@ const LOOT = {
 };
 
 const CLASSES = {
-  Warrior: { hp: 24, attack: 6, defense: 5, magic: 2, crit: 3 },
-  Rogue: { hp: 20, attack: 6, defense: 3, magic: 3, crit: 10 },
-  Mage: { hp: 18, attack: 4, defense: 2, magic: 8, crit: 5 },
+  Warrior: { strength: 8, dexterity: 4, wisdom: 3, vitality: 8 },
+  Rogue: { strength: 4, dexterity: 8, wisdom: 4, vitality: 7 },
+  Mage: { strength: 3, dexterity: 4, wisdom: 9, vitality: 6 },
 };
 
 let state = {
@@ -112,6 +112,51 @@ let state = {
   combatLog: [],
   effects: { tempAttack: 0, autoPuzzle: false, escape: false },
 };
+
+function getDerivedStats(includeEffects = true) {
+  if (!state.player) return {};
+  const base = state.player.stats || {};
+  const strength = base.strength || 0;
+  const dexterity = base.dexterity || 0;
+  const wisdom = base.wisdom || 0;
+  const vitality = base.vitality || 0;
+  const hpMax = vitality * 3;
+  const className = state.player.class;
+  const mageScale = className === 'Mage' ? 1.2 : 1;
+  let attack =
+    className === 'Warrior'
+      ? strength
+      : className === 'Rogue'
+        ? dexterity
+        : Math.round(wisdom * mageScale);
+  let defense = Math.floor(strength * 0.6);
+  let critChance = 5 + Math.round(dexterity * 0.5);
+
+  const applyBonuses = (obj = {}) => {
+    if (obj.attack) attack += obj.attack;
+    if (obj.magic || obj.wisdom) {
+      const bonus = obj.wisdom ?? obj.magic;
+      attack += className === 'Mage' ? Math.round(bonus * 1.5) : bonus;
+    }
+    if (obj.defense) defense += obj.defense;
+    if (obj.crit) critChance += obj.crit;
+  };
+
+  applyBonuses(state.player.weapon);
+  (state.player.passives || []).forEach(applyBonuses);
+  if (includeEffects && state.effects.tempAttack) attack += state.effects.tempAttack;
+
+  return { strength, dexterity, wisdom, vitality, hpMax, attack, defense, critChance: Math.min(critChance, 100) };
+}
+
+function clampPlayerHP() {
+  if (!state.player) return;
+  const { hpMax } = getDerivedStats(false);
+  if (hpMax) {
+    state.player.stats.hpCurrent = Math.min(state.player.stats.hpCurrent || 0, hpMax);
+    if (state.player.stats.hpCurrent < 0) state.player.stats.hpCurrent = 0;
+  }
+}
 
 function normalizeRoom(room) {
   const copy = JSON.parse(JSON.stringify(room));
@@ -165,7 +210,27 @@ function savePlayer() {
 
 function loadPlayer() {
   const data = localStorage.getItem('dd_player');
-  if (data) state.player = JSON.parse(data);
+  if (data) {
+    state.player = JSON.parse(data);
+    migratePlayerStats();
+  }
+}
+
+function migratePlayerStats() {
+  if (!state.player) return;
+  const stats = state.player.stats || {};
+  if (stats.strength == null || stats.dexterity == null || stats.wisdom == null || stats.vitality == null) {
+    const base = CLASSES[state.player.class] || { strength: 5, dexterity: 5, wisdom: 5, vitality: 6 };
+    stats.strength = stats.attack ?? base.strength;
+    stats.dexterity = stats.dexterity ?? Math.max(3, Math.round((stats.critChance || 5) / 2));
+    stats.wisdom = stats.magic ?? base.wisdom;
+    const derivedHp = stats.hpMax || stats.hpCurrent || base.vitality * 3;
+    stats.vitality = Math.max(base.vitality, Math.round(derivedHp / 3));
+  }
+  const { hpMax } = getDerivedStats(false);
+  stats.hpCurrent = Math.min(stats.hpCurrent ?? hpMax, hpMax);
+  state.player.stats = stats;
+  clampPlayerHP();
 }
 
 function getOwnerRooms() {
@@ -261,6 +326,7 @@ function switchTab(tab) {
 }
 
 function refreshAllPanels() {
+  clampPlayerHP();
   renderCharacterPanel();
   renderDungeonPanel();
   renderMapPanel();
@@ -293,12 +359,11 @@ function renderCharacterCreation() {
       level: 1,
       xp: 0,
       stats: {
-        hpMax: base.hp,
-        hpCurrent: base.hp,
-        attack: base.attack,
-        defense: base.defense,
-        magic: base.magic,
-        critChance: base.crit,
+        strength: base.strength,
+        dexterity: base.dexterity,
+        wisdom: base.wisdom,
+        vitality: base.vitality,
+        hpCurrent: base.vitality * 3,
       },
       weapon: { name: 'Training Blade', attack: 1 },
       passives: [],
@@ -495,11 +560,12 @@ function renderStatus() {
   const row = qs('#statusRow');
   if (!row) return;
   const player = state.player;
+  const derived = getDerivedStats();
   row.innerHTML = `
     <div>
       <div>${player.name} (Lv ${player.level} ${player.class})</div>
-      <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / player.stats.hpMax) * 100}%"></div></div>
-      <div class="small">ATK ${player.stats.attack}+${player.weapon?.attack || 0} | DEF ${player.stats.defense} | MAG ${player.stats.magic} | CRIT ${player.stats.critChance}%</div>
+      <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / (derived.hpMax || 1)) * 100}%"></div></div>
+      <div class="small">ATK ${derived.attack} | DEF ${derived.defense} | CRIT ${derived.critChance}%</div>
     </div>`;
 }
 
@@ -577,9 +643,12 @@ function inBounds(x,y){
 
 function resolveCombat(enemy) {
   const player = state.player;
-  const weaponBonus = player.weapon?.attack || 0;
-  const dmg = Math.max(1, (player.stats.attack + weaponBonus + (state.effects.tempAttack || 0)) - (enemy.kind==='boss'? enemy.defense || (4+player.level): ENEMIES[enemy.enemyType]?.defense || 1));
-  const crit = Math.random() < player.stats.critChance / 100;
+  const derived = getDerivedStats();
+  const dmg = Math.max(
+    1,
+    derived.attack - (enemy.kind === 'boss' ? enemy.defense || (4 + player.level) : ENEMIES[enemy.enemyType]?.defense || 1)
+  );
+  const crit = Math.random() < derived.critChance / 100;
   const dealt = crit ? dmg * 2 : dmg;
   enemy.hp -= dealt;
   log(`${player.name} hits ${enemy.enemyType || enemy.kind} for ${dealt}${crit?' (CRIT)':''}.`);
@@ -597,13 +666,15 @@ function resolveCombat(enemy) {
 function enemyAttack(enemy) {
   const player = state.player;
   const base = enemy.kind==='boss' ? (6 + player.level * 2) : ENEMIES[enemy.enemyType]?.attack || 2;
-  const dmg = Math.max(1, base - player.stats.defense);
+  const { defense, hpMax } = getDerivedStats(false);
+  const dmg = Math.max(1, base - defense);
   player.stats.hpCurrent -= dmg;
   log(`${enemy.enemyType || enemy.kind} hits you for ${dmg}.`);
   if (player.stats.hpCurrent <= 0) {
     player.stats.hpCurrent = 0;
     onFailure();
   }
+  if (player.stats.hpCurrent > hpMax) player.stats.hpCurrent = hpMax;
   renderStatus();
   savePlayer();
 }
@@ -822,10 +893,10 @@ function offerLoot() {
 
 function describeLoot(l){
   const parts=[];
-  if (l.attack) parts.push(`+${l.attack} ATK`);
-  if (l.magic) parts.push(`+${l.magic} MAG`);
-  if (l.defense) parts.push(`${l.defense>0?'+':''}${l.defense} DEF`);
-  if (l.crit) parts.push(`+${l.crit}% CRIT`);
+  if (l.attack) parts.push(`+${l.attack} Attack`);
+  if (l.magic || l.wisdom) parts.push(`+${l.magic || l.wisdom} Wisdom Power`);
+  if (l.defense) parts.push(`${l.defense>0?'+':''}${l.defense} Defense`);
+  if (l.crit) parts.push(`+${l.crit}% Crit`);
   if (l.heal) parts.push(`Heal ${l.heal}`);
   if (l.tempAttack) parts.push(`+${l.tempAttack} ATK (room)`);
   if (l.escape) parts.push('Escape combat');
@@ -839,7 +910,8 @@ function useItem(index){
   let message = `${item.name} used.`;
   if (item.heal) {
     const before = state.player.stats.hpCurrent;
-    state.player.stats.hpCurrent = Math.min(state.player.stats.hpMax, state.player.stats.hpCurrent + item.heal);
+    const { hpMax } = getDerivedStats();
+    state.player.stats.hpCurrent = Math.min(hpMax, state.player.stats.hpCurrent + item.heal);
     const healed = state.player.stats.hpCurrent - before;
     message = `Healed ${healed} HP.`;
   }
@@ -875,12 +947,11 @@ function grantXP(amount){
 function levelUp(){
   state.player.level += 1;
   state.player.xp = 0;
-  state.player.stats.hpMax += 3;
-  state.player.stats.hpCurrent = Math.min(state.player.stats.hpCurrent, state.player.stats.hpMax);
-  state.player.stats.attack += 1;
-  state.player.stats.defense += 1;
-  if (state.player.class === 'Mage') state.player.stats.magic += 1;
-  if (state.player.class === 'Rogue') state.player.stats.critChance += 1;
+  state.player.stats.vitality += 1;
+  if (state.player.class === 'Warrior') state.player.stats.strength += 1;
+  if (state.player.class === 'Rogue') state.player.stats.dexterity += 1;
+  if (state.player.class === 'Mage') state.player.stats.wisdom += 1;
+  clampPlayerHP();
   alert('Level up!');
 }
 
@@ -893,6 +964,7 @@ function log(msg){
 function renderCharacterPanel(){
   if (!state.player) return;
   const p = state.player;
+  const derived = getDerivedStats();
   const panel = qs('#character');
   panel.innerHTML = `
     <div class="section-card character-card">
@@ -908,14 +980,17 @@ function renderCharacterPanel(){
           <strong>Vitals</strong>
           <div class="bar-row">
             <div class="health-bar">
-              <div class="health-fill" style="width:${(p.stats.hpCurrent/p.stats.hpMax)*100}%"></div>
+              <div class="health-fill" style="width:${(p.stats.hpCurrent/(derived.hpMax||1))*100}%"></div>
             </div>
-            <span class="small">${p.stats.hpCurrent}/${p.stats.hpMax} HP</span>
+            <span class="small">${p.stats.hpCurrent}/${derived.hpMax} HP</span>
           </div>
-          <div class="stat-row"><span>ATK</span><span>${p.stats.attack}</span></div>
-          <div class="stat-row"><span>DEF</span><span>${p.stats.defense}</span></div>
-          <div class="stat-row"><span>MAG</span><span>${p.stats.magic}</span></div>
-          <div class="stat-row"><span>CRIT</span><span>${p.stats.critChance}%</span></div>
+          <div class="stat-row"><span>Strength</span><span>${derived.strength}</span></div>
+          <div class="stat-row"><span>Dexterity</span><span>${derived.dexterity}</span></div>
+          <div class="stat-row"><span>Wisdom</span><span>${derived.wisdom}</span></div>
+          <div class="stat-row"><span>Vitality</span><span>${derived.vitality}</span></div>
+          <div class="stat-row"><span>Attack</span><span>${derived.attack}</span></div>
+          <div class="stat-row"><span>Defense</span><span>${derived.defense}</span></div>
+          <div class="stat-row"><span>Crit</span><span>${derived.critChance}%</span></div>
         </div>
         <div class="info-block">
           <strong>Weapon</strong>

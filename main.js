@@ -361,7 +361,6 @@ async function init() {
     refreshAllPanels();
   }
   initControls();
-  setupSwipeControls();
 }
 
 function setupOwnerDateControl() {
@@ -718,45 +717,72 @@ function setupSwipeControls() {
   let startX = 0;
   let startY = 0;
   let tracking = false;
-  const minDistance = 30;
+  const minDistance = 30; // px
 
-  root.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
-    tracking = true;
-  }, { passive: true });
+  root.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      tracking = true;
+    },
+    { passive: true }
+  );
 
-  root.addEventListener('touchend', (e) => {
-    if (!tracking) return;
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - startX;
-    const dy = touch.clientY - startY;
-    tracking = false;
-    const absX = Math.abs(dx);
-    const absY = Math.abs(dy);
-    if (Math.max(absX, absY) < minDistance) return;
-    const direction = absX > absY ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
-    handleMove(direction);
-  });
+  root.addEventListener(
+    'touchend',
+    (e) => {
+      if (!tracking) return;
+      tracking = false;
+
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (Math.max(absX, absY) < minDistance) return;
+
+      const direction =
+        absX > absY
+          ? dx > 0
+            ? 'right'
+            : 'left'
+          : dy > 0
+          ? 'down'
+          : 'up';
+
+      handleMove(direction);
+    },
+    { passive: true }
+  );
 
   root.dataset.swipeAttached = '1';
 }
 
 function handleMove(dir) {
   if (!state.currentRoom) return;
+
   const normalized = (dir || '').toLowerCase();
   const delta = {
+    // keyboard
     w: [0, -1],
-    up: [0, -1],
     s: [0, 1],
-    down: [0, 1],
     a: [-1, 0],
-    left: [-1, 0],
     d: [1, 0],
+    arrowup: [0, -1],
+    arrowdown: [0, 1],
+    arrowleft: [-1, 0],
+    arrowright: [1, 0],
+    // swipe directions
+    up: [0, -1],
+    down: [0, 1],
+    left: [-1, 0],
     right: [1, 0],
   }[normalized];
+
   if (!delta) return;
   const nx = state.playerPos.x + delta[0];
   const ny = state.playerPos.y + delta[1];

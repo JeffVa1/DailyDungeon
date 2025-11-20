@@ -647,13 +647,28 @@ function renderStatus() {
 function renderDpad() {
   const dpad = qs('#dpad');
   if (!dpad) return;
-  const order = ['','','','W','','','A','S','D'];
+  const order = [
+    { label: '', dir: '' },
+    { label: '', dir: '' },
+    { label: '', dir: '' },
+    { label: 'W', dir: 'w', aria: 'Move up' },
+    { label: '', dir: '' },
+    { label: '', dir: '' },
+    { label: 'A', dir: 'a', aria: 'Move left' },
+    { label: 'S', dir: 's', aria: 'Move down' },
+    { label: 'D', dir: 'd', aria: 'Move right' }
+  ];
+  dpad.setAttribute('aria-label', 'Movement controls');
   dpad.innerHTML = '';
-  order.forEach((label) => {
+  order.forEach(({ label, dir, aria }) => {
     const btn = document.createElement('button');
     btn.textContent = label;
     if (!label) { btn.disabled = true; btn.style.visibility='hidden'; }
-    btn.addEventListener('click', () => handleMove(label.toLowerCase()));
+    if (dir) {
+      btn.dataset.dir = dir;
+      if (aria) btn.setAttribute('aria-label', aria);
+    }
+    btn.addEventListener('click', () => handleMove((dir || label).toLowerCase()));
     dpad.appendChild(btn);
   });
 }

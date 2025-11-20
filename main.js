@@ -149,6 +149,27 @@ async function fetchJsonWithFallback(path) {
   });
 }
 
+function getGithubRepoInfo() {
+  const isGithubPages = window.location.hostname.endsWith('.github.io');
+  if (!isGithubPages) return null;
+  const owner = window.location.hostname.replace('.github.io', '');
+  const [repo] = window.location.pathname.split('/').filter(Boolean);
+  if (!owner || !repo) return null;
+  return { owner, repo };
+}
+
+function getRoomUrlCandidates(path) {
+  const resolved = resolveAssetUrl(path);
+  const unique = new Set([resolved]);
+  const repoInfo = getGithubRepoInfo();
+  if (repoInfo) {
+    ['main', 'master', 'gh-pages'].forEach((branch) => {
+      unique.add(`https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${path}`);
+    });
+  }
+  return Array.from(unique);
+}
+
 async function loadStaticData() {
   const [loot, enemies, bosses] = await Promise.all([
     fetchJsonWithFallback('data/loot.json'),
@@ -304,17 +325,19 @@ function getRoomFilename(date) {
 
 async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
-  const url = resolveAssetUrl(filename);
   const saved = getSavedRoomFiles();
-  try {
-    const data = await fetchJsonWithFallback(url);
-    if (data) {
-      saved[filename] = data;
-      saveRoomFiles(saved);
-      return data;
+  const candidates = getRoomUrlCandidates(filename);
+  for (const url of candidates) {
+    try {
+      const data = await fetchJsonWithFallback(url);
+      if (data) {
+        saved[filename] = data;
+        saveRoomFiles(saved);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Room fetch failed for', url, err);
     }
-  } catch (err) {
-    console.warn('Room fetch failed for', url, err);
   }
   return saved[filename] || null;
 }

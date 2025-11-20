@@ -1,0 +1,42 @@
+{
+  "date": "2025-11-19",
+  "type": "combat",
+  "name": "Testing",
+  "introText": "testing room loading",
+  "successText": "success",
+  "failureText": "fail",
+  "gridWidth": 4,
+  "gridHeight": 3,
+  "tiles": [
+    "...E",
+    "...E",
+    "...E"
+  ],
+  "entities": [
+    {
+      "kind": "exit",
+      "x": 3,
+      "y": 0
+    },
+    {
+      "kind": "playerSpawn",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "kind": "exit",
+      "x": 3,
+      "y": 1
+    },
+    {
+      "kind": "exit",
+      "x": 3,
+      "y": 2
+    }
+  ],
+  "puzzleConfigs": [],
+  "trapConfigs": [],
+  "bossConfig": {
+    "name": "The Hollow Knight"
+  }
+}

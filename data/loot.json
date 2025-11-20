@@ -1,10 +1,8 @@
 {
   "weapons": [
-    { "name": "Rusty Dagger", "attack": 1 },
-    { "name": "Iron Longsword", "attack": 3 },
-    { "name": "Ember Wand", "magic": 2 },
-    { "name": "Shadow Bow", "attack": 2, "crit": 3 },
-    { "name": "Ogre Smasher", "attack": 5, "defense": -1 }
+    { "name": "Test", "attack": 1 },
+    { "name": "Test", "attack": 3 },
+    { "name": "Test", "attack": 2 },
   ],
   "passives": [
     { "name": "Stone Skin", "defense": 2 },

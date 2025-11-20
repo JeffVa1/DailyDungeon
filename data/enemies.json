@@ -1,0 +1,7 @@
+{
+  "Goblin Cutthroat": { "hp": 10, "attack": 4, "defense": 1, "crit": 0.1 },
+  "Skeleton Guard": { "hp": 14, "attack": 3, "defense": 3, "crit": 0.05 },
+  "Cave Slime": { "hp": 18, "attack": 2, "defense": 0, "crit": 0.02 },
+  "Shadow Wolf": { "hp": 20, "attack": 5, "defense": 2, "crit": 0.1 },
+  "Ironbound Archer": { "hp": 16, "attack": 6, "defense": 1, "crit": 0.1 }
+}

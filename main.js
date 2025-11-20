@@ -60,7 +60,7 @@ const ROOM_DEFINITIONS = [
   }
 ];
 
-const ENEMIES = {
+const DEFAULT_ENEMIES = {
   'Goblin Cutthroat': { hp: 10, attack: 4, defense: 1, crit: 0.1 },
   'Skeleton Guard': { hp: 14, attack: 3, defense: 3, crit: 0.05 },
   'Cave Slime': { hp: 18, attack: 2, defense: 0, crit: 0.02 },
@@ -68,9 +68,7 @@ const ENEMIES = {
   'Ironbound Archer': { hp: 16, attack: 6, defense: 1, crit: 0.1 },
 };
 
-const BOSSES = ['The Hollow Knight', 'Maw of Cinders', 'Oracle of Dust'];
-
-const LOOT = {
+const DEFAULT_LOOT = {
   weapons: [
     { name: 'Rusty Dagger', attack: 1 },
     { name: 'Iron Longsword', attack: 3 },
@@ -94,10 +92,16 @@ const LOOT = {
   ],
 };
 
+const DEFAULT_BOSSES = ['The Hollow Knight', 'Maw of Cinders', 'Oracle of Dust'];
+
+let ENEMIES = { ...DEFAULT_ENEMIES };
+let LOOT = { ...DEFAULT_LOOT };
+let BOSSES = [...DEFAULT_BOSSES];
+
 const CLASSES = {
-  Warrior: { hp: 24, attack: 6, defense: 5, magic: 2, crit: 3 },
-  Rogue: { hp: 20, attack: 6, defense: 3, magic: 3, crit: 10 },
-  Mage: { hp: 18, attack: 4, defense: 2, magic: 8, crit: 5 },
+  Warrior: { strength: 8, dexterity: 4, wisdom: 3, vitality: 8 },
+  Rogue: { strength: 4, dexterity: 8, wisdom: 4, vitality: 7 },
+  Mage: { strength: 3, dexterity: 4, wisdom: 9, vitality: 6 },
 };
 
 let state = {
@@ -110,7 +114,95 @@ let state = {
   activeTab: 'dungeon',
   owner: ownerMode,
   combatLog: [],
+  effects: { tempAttack: 0, autoPuzzle: false, escape: false },
 };
+
+async function fetchJsonWithFallback(path) {
+  try {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (res.ok) return await res.json();
+  } catch (err) {
+    console.warn('Fetch failed, trying XHR for', path, err);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.overrideMimeType('application/json');
+      xhr.open('GET', path, true);
+      xhr.onload = () => {
+        if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
+          try { resolve(JSON.parse(xhr.responseText || 'null')); }
+          catch (e) { reject(e); }
+        } else {
+          reject(new Error('XHR status ' + xhr.status));
+        }
+      };
+      xhr.onerror = () => reject(new Error('XHR network error'));
+      xhr.send();
+    } catch (err) {
+      reject(err);
+    }
+  }).catch((err) => {
+    console.warn('Fallback load failed for', path, err);
+    return null;
+  });
+}
+
+async function loadStaticData() {
+  const [loot, enemies, bosses] = await Promise.all([
+    fetchJsonWithFallback('data/loot.json'),
+    fetchJsonWithFallback('data/enemies.json'),
+    fetchJsonWithFallback('data/bosses.json'),
+  ]);
+  LOOT = loot || DEFAULT_LOOT;
+  ENEMIES = enemies || DEFAULT_ENEMIES;
+  BOSSES = bosses || [...DEFAULT_BOSSES];
+}
+
+function getDerivedStats(includeEffects = true) {
+  if (!state.player) return {};
+  const base = state.player.stats || {};
+  const strength = base.strength || 0;
+  const dexterity = base.dexterity || 0;
+  const wisdom = base.wisdom || 0;
+  const vitality = base.vitality || 0;
+  const hpMax = vitality * 3;
+  const className = state.player.class;
+  const mageScale = className === 'Mage' ? 1.2 : 1;
+  let attack =
+    className === 'Warrior'
+      ? strength
+      : className === 'Rogue'
+        ? dexterity
+        : Math.round(wisdom * mageScale);
+  let defense = Math.floor(strength * 0.6);
+  let critChance = 5 + Math.round(dexterity * 0.5);
+
+  const applyBonuses = (obj = {}) => {
+    if (obj.attack) attack += obj.attack;
+    if (obj.magic || obj.wisdom) {
+      const bonus = obj.wisdom ?? obj.magic;
+      attack += className === 'Mage' ? Math.round(bonus * 1.5) : bonus;
+    }
+    if (obj.defense) defense += obj.defense;
+    if (obj.crit) critChance += obj.crit;
+  };
+
+  applyBonuses(state.player.weapon);
+  (state.player.passives || []).forEach(applyBonuses);
+  if (includeEffects && state.effects.tempAttack) attack += state.effects.tempAttack;
+
+  return { strength, dexterity, wisdom, vitality, hpMax, attack, defense, critChance: Math.min(critChance, 100) };
+}
+
+function clampPlayerHP() {
+  if (!state.player) return;
+  const { hpMax } = getDerivedStats(false);
+  if (hpMax) {
+    state.player.stats.hpCurrent = Math.min(state.player.stats.hpCurrent || 0, hpMax);
+    if (state.player.stats.hpCurrent < 0) state.player.stats.hpCurrent = 0;
+  }
+}
 
 function normalizeRoom(room) {
   const copy = JSON.parse(JSON.stringify(room));
@@ -164,7 +256,27 @@ function savePlayer() {
 
 function loadPlayer() {
   const data = localStorage.getItem('dd_player');
-  if (data) state.player = JSON.parse(data);
+  if (data) {
+    state.player = JSON.parse(data);
+    migratePlayerStats();
+  }
+}
+
+function migratePlayerStats() {
+  if (!state.player) return;
+  const stats = state.player.stats || {};
+  if (stats.strength == null || stats.dexterity == null || stats.wisdom == null || stats.vitality == null) {
+    const base = CLASSES[state.player.class] || { strength: 5, dexterity: 5, wisdom: 5, vitality: 6 };
+    stats.strength = stats.attack ?? base.strength;
+    stats.dexterity = stats.dexterity ?? Math.max(3, Math.round((stats.critChance || 5) / 2));
+    stats.wisdom = stats.magic ?? base.wisdom;
+    const derivedHp = stats.hpMax || stats.hpCurrent || base.vitality * 3;
+    stats.vitality = Math.max(base.vitality, Math.round(derivedHp / 3));
+  }
+  const { hpMax } = getDerivedStats(false);
+  stats.hpCurrent = Math.min(stats.hpCurrent ?? hpMax, hpMax);
+  state.player.stats = stats;
+  clampPlayerHP();
 }
 
 function getOwnerRooms() {
@@ -193,13 +305,9 @@ async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
   const saved = getSavedRoomFiles();
   if (saved[filename]) return saved[filename];
-  const canFetch = ['http:', 'https:'].includes(location.protocol);
-  if (!canFetch) {
-    return null;
-  }
   try {
-    const res = await fetch(filename, { cache: 'no-store' });
-    if (res.ok) return await res.json();
+    const data = await fetchJsonWithFallback(filename);
+    if (data) return data;
   } catch (err) {
     console.warn('Room fetch failed for', filename, err);
   }
@@ -228,9 +336,13 @@ function persistRoomToFile(room) {
   }
 }
 
-function init() {
-  qs('#todayDisplay').textContent = todayStr;
-  if (ownerMode) qsa('.owner-only').forEach((b) => (b.style.display = 'inline-flex'));
+async function init() {
+  await loadStaticData();
+  if (ownerMode) {
+    qsa('.owner-only').forEach((b) => (b.style.display = 'inline-flex'));
+    setupOwnerDateControl();
+  }
+  refreshDateUI();
   attachTabEvents();
   loadPlayer();
   if (!state.player) {
@@ -240,6 +352,26 @@ function init() {
     refreshAllPanels();
   }
   initControls();
+}
+
+function setupOwnerDateControl() {
+  const container = qs('#ownerDateControl');
+  if (!container) return;
+  container.style.display = 'flex';
+  container.innerHTML = `
+    <label for="ownerDatePicker">Date</label>
+    <input type="date" id="ownerDatePicker" value="${state.selectedDate}">
+  `;
+  container.querySelector('#ownerDatePicker').addEventListener('change', (e) => {
+    setSelectedDate(e.target.value || todayStr);
+  });
+}
+
+function refreshDateUI() {
+  const todayEl = qs('#todayDisplay');
+  if (todayEl) todayEl.textContent = state.owner ? `Date: ${state.selectedDate}` : todayStr;
+  const picker = qs('#ownerDatePicker');
+  if (picker && picker.value !== state.selectedDate) picker.value = state.selectedDate;
 }
 
 function attachTabEvents() {
@@ -260,6 +392,7 @@ function switchTab(tab) {
 }
 
 function refreshAllPanels() {
+  clampPlayerHP();
   renderCharacterPanel();
   renderDungeonPanel();
   renderMapPanel();
@@ -292,12 +425,11 @@ function renderCharacterCreation() {
       level: 1,
       xp: 0,
       stats: {
-        hpMax: base.hp,
-        hpCurrent: base.hp,
-        attack: base.attack,
-        defense: base.defense,
-        magic: base.magic,
-        critChance: base.crit,
+        strength: base.strength,
+        dexterity: base.dexterity,
+        wisdom: base.wisdom,
+        vitality: base.vitality,
+        hpCurrent: base.vitality * 3,
       },
       weapon: { name: 'Training Blade', attack: 1 },
       passives: [],
@@ -319,6 +451,13 @@ async function getRoomForDate(date) {
   return ROOM_DEFINITIONS.find((r) => r.date === date) || null;
 }
 
+function setSelectedDate(date) {
+  state.selectedDate = date || todayStr;
+  refreshDateUI();
+  if (state.activeTab === 'dungeon') renderDungeonPanel();
+  if (state.activeTab === 'editor') renderEditorPanel();
+}
+
 function buildGrid(room) {
   const grid = [];
   for (let y = 0; y < room.gridHeight; y++) {
@@ -335,35 +474,45 @@ function buildGrid(room) {
 
 async function renderDungeonPanel() {
   const panel = qs('#dungeon');
-  const dateControls = state.owner
-    ? `<div class="button-row">
-        <label>Play Date<input type="date" id="playDate" value="${state.selectedDate}"></label>
-        <button id="loadDateRoom">Load Room</button>
-      </div>`
-    : '';
   if (!state.player) {
     panel.innerHTML = `<div class="section-card">Create a character to enter the dungeon.</div>`;
     return;
   }
+  const ownerActions = state.owner
+    ? `<div class="button-row"><div class="pill subtle">Date: ${state.selectedDate}</div><button id="restartDay">Restart Day</button></div>`
+    : '';
   panel.innerHTML = `<div class="section-card">
-    ${dateControls}
+    ${ownerActions}
     <div id="dungeonContent">Loading room...</div>
   </div>`;
   const targetDate = state.owner ? state.selectedDate : todayStr;
   const rawRoom = await getRoomForDate(targetDate);
   const room = rawRoom ? normalizeRoom(rawRoom) : null;
   const content = qs('#dungeonContent');
-  if (qs('#playDate')) {
-    qs('#playDate').onchange = (e) => {
-      state.selectedDate = e.target.value || todayStr;
+  if (qs('#restartDay')) {
+    qs('#restartDay').onclick = () => {
+      resetDayProgress(targetDate);
+      renderDungeonPanel();
     };
-    qs('#loadDateRoom').onclick = () => renderDungeonPanel();
   }
   if (!room) {
     content.innerHTML = `<div class="section-card">No dungeon defined for ${targetDate}. ${state.owner ? 'Opening owner editor for this date.' : ''}</div>`;
     if (state.owner) openEditorForDate(targetDate);
     return;
   }
+
+  const status = state.player.completedRooms.includes(targetDate)
+    ? 'complete'
+    : state.player.failedRooms.includes(targetDate)
+      ? 'failed'
+      : '';
+
+  if (status) {
+    renderOutcome(content, status, room, targetDate);
+    clearActionBar();
+    return;
+  }
+
   state.currentRoom = JSON.parse(JSON.stringify(room));
   state.grid = buildGrid(room);
   initEntities(room);
@@ -382,27 +531,67 @@ async function renderDungeonPanel() {
   setActionBar();
 }
 
+function renderOutcome(container, status, room, date) {
+  const label = status === 'complete' ? 'Completed' : 'Failed';
+  const message = status === 'complete' ? room.successText : room.failureText;
+  const next = status === 'complete'
+    ? 'Come back tomorrow for a new challenge.'
+    : 'Rest up and return tomorrow to try again.';
+  container.innerHTML = `
+    <div class="outcome-card ${status}">
+      <div class="outcome-header">
+        <div>
+          <p class="small">${date}</p>
+          <h2>${room.name}</h2>
+        </div>
+        <span class="pill">${label}</span>
+      </div>
+      <p>${message}</p>
+      <p class="small">${next}</p>
+      ${state.owner ? '<button id="ownerRestart">Restart Day</button>' : ''}
+    </div>
+  `;
+  if (state.owner) {
+    qs('#ownerRestart').onclick = () => {
+      resetDayProgress(date);
+      renderDungeonPanel();
+    };
+  }
+}
+
 function renderGrid() {
   const wrap = qs('#roomGrid');
   if (!wrap) return;
   const room = state.currentRoom;
-  wrap.style.gridTemplateColumns = `repeat(${room.gridWidth}, 28px)`;
+  wrap.classList.add('grid-labeled');
+  wrap.style.gridTemplateColumns = `32px repeat(${room.gridWidth}, 28px)`;
+  wrap.style.gridTemplateRows = `24px repeat(${room.gridHeight}, 28px)`;
   wrap.innerHTML = '';
-  for (let y = 0; y < room.gridHeight; y++) {
-    for (let x = 0; x < room.gridWidth; x++) {
-      const tile = state.grid[y][x];
+  for (let y = -1; y < room.gridHeight; y++) {
+    for (let x = -1; x < room.gridWidth; x++) {
       const cell = document.createElement('div');
-      cell.classList.add('cell');
-      cell.dataset.x = x; cell.dataset.y = y;
-      const ent = state.entities.find((e) => e.x === x && e.y === y);
-      if (tile === '#') cell.classList.add('tile-wall');
-      else if (tile === 'S') cell.classList.add('tile-puzzle');
-      else if (tile === 'T') cell.classList.add('tile-trap');
-      else if (tile === 'O') cell.classList.add('tile-obstacle');
-      else if (tile === 'E') cell.classList.add('tile-exit');
-      else cell.classList.add('tile-floor');
-      if (ent) cell.classList.add(entityClass(ent));
-      cell.textContent = ent ? entityGlyph(ent) : '';
+      if (x === -1 && y === -1) {
+        cell.className = 'label-cell corner';
+      } else if (y === -1) {
+        cell.className = 'label-cell column-label';
+        cell.textContent = x + 1;
+      } else if (x === -1) {
+        cell.className = 'label-cell row-label';
+        cell.textContent = y + 1;
+      } else {
+        const tile = state.grid[y][x];
+        cell.classList.add('cell');
+        cell.dataset.x = x; cell.dataset.y = y;
+        const ent = state.entities.find((e) => e.x === x && e.y === y);
+        if (tile === '#') cell.classList.add('tile-wall');
+        else if (tile === 'S') cell.classList.add('tile-puzzle');
+        else if (tile === 'T') cell.classList.add('tile-trap');
+        else if (tile === 'O') cell.classList.add('tile-obstacle');
+        else if (tile === 'E') cell.classList.add('tile-exit');
+        else cell.classList.add('tile-floor');
+        if (ent) cell.classList.add(entityClass(ent));
+        cell.textContent = ent ? entityGlyph(ent) : '';
+      }
       wrap.appendChild(cell);
     }
   }
@@ -446,11 +635,12 @@ function renderStatus() {
   const row = qs('#statusRow');
   if (!row) return;
   const player = state.player;
+  const derived = getDerivedStats();
   row.innerHTML = `
     <div>
       <div>${player.name} (Lv ${player.level} ${player.class})</div>
-      <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / player.stats.hpMax) * 100}%"></div></div>
-      <div class="small">ATK ${player.stats.attack}+${player.weapon?.attack || 0} | DEF ${player.stats.defense} | MAG ${player.stats.magic} | CRIT ${player.stats.critChance}%</div>
+      <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / (derived.hpMax || 1)) * 100}%"></div></div>
+      <div class="small">ATK ${derived.attack} | DEF ${derived.defense} | CRIT ${derived.critChance}%</div>
     </div>`;
 }
 
@@ -469,14 +659,8 @@ function renderDpad() {
 }
 
 function openEditorForDate(date){
+  setSelectedDate(date);
   switchTab('editor');
-  setTimeout(()=>{
-    const dateInput = qs('#edDate');
-    if (dateInput) {
-      dateInput.value = date;
-      loadEditorRoom(date);
-    }
-  }, 50);
 }
 
 function initControls() {
@@ -487,6 +671,8 @@ function initControls() {
     if (['ArrowRight','d','D'].includes(e.key)) return handleMove('d');
     if (e.ctrlKey && e.key.toLowerCase() === 'o') {
       state.owner = true; qsa('.owner-only').forEach((b)=>b.style.display='inline-flex');
+      setupOwnerDateControl();
+      refreshDateUI();
       switchTab('editor');
     }
   });
@@ -503,6 +689,11 @@ function handleMove(dir) {
   if (['#','O'].includes(tile)) return;
   const ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
   if (ent) {
+    if (['enemy','boss'].includes(ent.kind) && state.effects.escape) {
+      log('You vanish in smoke, slipping past the foe.');
+      state.effects.escape = false;
+      state.entities = state.entities.filter((e) => e !== ent);
+    }
     if (ent.kind === 'exit') return tryExit();
     if (['enemy','boss'].includes(ent.kind)) return resolveCombat(ent);
     if (ent.kind === 'puzzle') return openPuzzle(ent);
@@ -513,8 +704,7 @@ function handleMove(dir) {
   if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
-  enemyTurn();
-  renderGrid();
+  advanceEnemiesAfterPlayerAction();
 }
 
 function inBounds(x,y){
@@ -524,50 +714,74 @@ function inBounds(x,y){
 
 function resolveCombat(enemy) {
   const player = state.player;
-  const weaponBonus = player.weapon?.attack || 0;
-  const dmg = Math.max(1, (player.stats.attack + weaponBonus) - (enemy.kind==='boss'? enemy.defense || (4+player.level): ENEMIES[enemy.enemyType]?.defense || 1));
-  const crit = Math.random() < player.stats.critChance / 100;
+  const derived = getDerivedStats();
+  const dmg = Math.max(
+    1,
+    derived.attack - (enemy.kind === 'boss' ? enemy.defense || (4 + player.level) : ENEMIES[enemy.enemyType]?.defense || 1)
+  );
+  const crit = Math.random() < derived.critChance / 100;
   const dealt = crit ? dmg * 2 : dmg;
   enemy.hp -= dealt;
   log(`${player.name} hits ${enemy.enemyType || enemy.kind} for ${dealt}${crit?' (CRIT)':''}.`);
   if (enemy.hp <= 0) {
     state.entities = state.entities.filter((e) => e !== enemy);
-    if (hasPassive('Bloodthirst')) player.stats.hpCurrent = Math.min(player.stats.hpMax, player.stats.hpCurrent + 2);
     renderGrid();
     if (state.currentRoom.type === 'boss' && !state.entities.some((e) => e.kind==='boss')) log('Boss defeated!');
+    advanceEnemiesAfterPlayerAction();
     return;
   }
   enemyAttack(enemy);
-  renderGrid();
+  advanceEnemiesAfterPlayerAction();
 }
 
 function enemyAttack(enemy) {
   const player = state.player;
   const base = enemy.kind==='boss' ? (6 + player.level * 2) : ENEMIES[enemy.enemyType]?.attack || 2;
-  const dmg = Math.max(1, base - player.stats.defense);
+  const { defense, hpMax } = getDerivedStats(false);
+  const dmg = Math.max(1, base - defense);
   player.stats.hpCurrent -= dmg;
   log(`${enemy.enemyType || enemy.kind} hits you for ${dmg}.`);
   if (player.stats.hpCurrent <= 0) {
     player.stats.hpCurrent = 0;
     onFailure();
   }
+  if (player.stats.hpCurrent > hpMax) player.stats.hpCurrent = hpMax;
   renderStatus();
+  savePlayer();
 }
 
 function enemyTurn() {
-  state.entities.filter((e)=>['enemy','boss'].includes(e.kind)).forEach((enemy) => {
+  const foes = state.entities.filter((e)=>['enemy','boss'].includes(e.kind));
+  foes.forEach((enemy) => {
+    if (state.player.stats.hpCurrent <= 0) return;
     const dx = state.playerPos.x - enemy.x;
     const dy = state.playerPos.y - enemy.y;
+    const dist = Math.abs(dx) + Math.abs(dy);
+    if (dist <= 1) {
+      enemyAttack(enemy);
+      return;
+    }
     const stepX = dx===0?0:dx/Math.abs(dx);
     const stepY = dy===0?0:dy/Math.abs(dy);
     const tryX = {x: enemy.x + stepX, y: enemy.y};
     const tryY = {x: enemy.x, y: enemy.y + stepY};
     if (Math.abs(dx) > Math.abs(dy)) attemptMove(enemy, tryX) || attemptMove(enemy, tryY);
     else attemptMove(enemy, tryY) || attemptMove(enemy, tryX);
-    if (enemy.x === state.playerPos.x && enemy.y === state.playerPos.y) {
+    const newDx = state.playerPos.x - enemy.x;
+    const newDy = state.playerPos.y - enemy.y;
+    const newDist = Math.abs(newDx) + Math.abs(newDy);
+    if (newDist <= 1) {
       enemyAttack(enemy);
     }
   });
+}
+
+function advanceEnemiesAfterPlayerAction() {
+  if (!state.player || state.player.stats.hpCurrent <= 0) return;
+  enemyTurn();
+  renderGrid();
+  renderStatus();
+  savePlayer();
 }
 
 function attemptMove(ent, pos) {
@@ -619,8 +833,13 @@ function openPuzzle(ent) {
     content.querySelectorAll('button').forEach((b)=>b.onclick=()=>choose(parseInt(b.dataset.i)));
   }
   function choose(i) {
-    if (config.autoSolve || hasItem('Elixir of Clarity')) { finish(true); return; }
-    if (i === config.answer) finish(true); else { attempts--; if (attempts<=0) finish(false); else render(); }
+    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; advanceEnemiesAfterPlayerAction(); return; }
+    if (i === config.answer) { finish(true); advanceEnemiesAfterPlayerAction(); }
+    else {
+      attempts--;
+      if (attempts<=0) { finish(false); advanceEnemiesAfterPlayerAction(); }
+      else { advanceEnemiesAfterPlayerAction(); render(); }
+    }
   }
   function finish(success) {
     modal.classList.add('hidden');
@@ -683,7 +902,8 @@ function triggerTrap(x,y){
     }
     renderStatus();
     renderGrid();
-    if (state.player.stats.hpCurrent>0){ enemyTurn(); renderGrid(); }
+    savePlayer();
+    if (state.player.stats.hpCurrent>0){ advanceEnemiesAfterPlayerAction(); }
   }
   render();
 }
@@ -695,6 +915,9 @@ function onSuccess() {
   grantXP(30);
   offerLoot();
   savePlayer();
+  const content = qs('#dungeonContent');
+  if (content && state.currentRoom) renderOutcome(content, 'complete', state.currentRoom, date);
+  clearActionBar();
 }
 
 function onFailure() {
@@ -702,7 +925,10 @@ function onFailure() {
   const date = state.currentRoom?.date || todayStr;
   if (!state.player.failedRooms.includes(date)) state.player.failedRooms.push(date);
   savePlayer();
+  const content = qs('#dungeonContent');
+  if (content && state.currentRoom) renderOutcome(content, 'failed', state.currentRoom, date);
   alert('You have been defeated. Try again tomorrow.');
+  clearActionBar();
 }
 
 function offerLoot() {
@@ -738,15 +964,45 @@ function offerLoot() {
 
 function describeLoot(l){
   const parts=[];
-  if (l.attack) parts.push(`+${l.attack} ATK`);
-  if (l.magic) parts.push(`+${l.magic} MAG`);
-  if (l.defense) parts.push(`${l.defense>0?'+':''}${l.defense} DEF`);
-  if (l.crit) parts.push(`+${l.crit}% CRIT`);
+  if (l.attack) parts.push(`+${l.attack} Attack`);
+  if (l.magic || l.wisdom) parts.push(`+${l.magic || l.wisdom} Wisdom Power`);
+  if (l.defense) parts.push(`${l.defense>0?'+':''}${l.defense} Defense`);
+  if (l.crit) parts.push(`+${l.crit}% Crit`);
   if (l.heal) parts.push(`Heal ${l.heal}`);
   if (l.tempAttack) parts.push(`+${l.tempAttack} ATK (room)`);
   if (l.escape) parts.push('Escape combat');
   if (l.autoPuzzle) parts.push('Auto-solve next puzzle');
   return parts.join(', ');
+}
+
+function useItem(index){
+  const item = state.player.items[index];
+  if (!item) return;
+  let message = `${item.name} used.`;
+  if (item.heal) {
+    const before = state.player.stats.hpCurrent;
+    const { hpMax } = getDerivedStats();
+    state.player.stats.hpCurrent = Math.min(hpMax, state.player.stats.hpCurrent + item.heal);
+    const healed = state.player.stats.hpCurrent - before;
+    message = `Healed ${healed} HP.`;
+  }
+  if (item.tempAttack) {
+    state.effects.tempAttack = (state.effects.tempAttack || 0) + item.tempAttack;
+    message = `Attack increased by ${item.tempAttack} for this run.`;
+  }
+  if (item.escape) {
+    state.effects.escape = true;
+    message = 'You are ready to escape the next threat.';
+  }
+  if (item.autoPuzzle) {
+    state.effects.autoPuzzle = true;
+    message = 'The next puzzle will be solved automatically.';
+  }
+  state.player.items.splice(index,1);
+  log(message);
+  renderCharacterPanel();
+  renderStatus();
+  savePlayer();
 }
 
 function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -762,12 +1018,11 @@ function grantXP(amount){
 function levelUp(){
   state.player.level += 1;
   state.player.xp = 0;
-  state.player.stats.hpMax += 3;
-  state.player.stats.hpCurrent = state.player.stats.hpMax;
-  state.player.stats.attack += 1;
-  state.player.stats.defense += 1;
-  if (state.player.class === 'Mage') state.player.stats.magic += 1;
-  if (state.player.class === 'Rogue') state.player.stats.critChance += 1;
+  state.player.stats.vitality += 1;
+  if (state.player.class === 'Warrior') state.player.stats.strength += 1;
+  if (state.player.class === 'Rogue') state.player.stats.dexterity += 1;
+  if (state.player.class === 'Mage') state.player.stats.wisdom += 1;
+  clampPlayerHP();
   alert('Level up!');
 }
 
@@ -780,34 +1035,61 @@ function log(msg){
 function renderCharacterPanel(){
   if (!state.player) return;
   const p = state.player;
+  const derived = getDerivedStats();
   const panel = qs('#character');
   panel.innerHTML = `
-    <div class="section-card">
-      <h2>${p.name} (Lv ${p.level} ${p.class})</h2>
+    <div class="section-card character-card">
+      <div class="header-row">
+        <div>
+          <p class="small">${p.class}</p>
+          <h2>${p.name}</h2>
+        </div>
+        <div class="pill">Level ${p.level}</div>
+      </div>
       <div class="summary-grid">
-        <div>
-          <strong>Stats</strong>
-          <div>HP ${p.stats.hpCurrent}/${p.stats.hpMax}</div>
-          <div>ATK ${p.stats.attack}</div>
-          <div>DEF ${p.stats.defense}</div>
-          <div>MAG ${p.stats.magic}</div>
-          <div>CRIT ${p.stats.critChance}%</div>
+        <div class="info-block">
+          <strong>Vitals</strong>
+          <div class="bar-row">
+            <div class="health-bar">
+              <div class="health-fill" style="width:${(p.stats.hpCurrent/(derived.hpMax||1))*100}%"></div>
+            </div>
+            <span class="small">${p.stats.hpCurrent}/${derived.hpMax} HP</span>
+          </div>
+          <div class="stat-row"><span>Strength</span><span>${derived.strength}</span></div>
+          <div class="stat-row"><span>Dexterity</span><span>${derived.dexterity}</span></div>
+          <div class="stat-row"><span>Wisdom</span><span>${derived.wisdom}</span></div>
+          <div class="stat-row"><span>Vitality</span><span>${derived.vitality}</span></div>
+          <div class="stat-divider" aria-hidden="true"></div>
+          <div class="stat-row"><span>Attack</span><span>${derived.attack}</span></div>
+          <div class="stat-row"><span>Defense</span><span>${derived.defense}</span></div>
+          <div class="stat-row"><span>Crit</span><span>${derived.critChance}%</span></div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Weapon</strong>
-          <div>${p.weapon?.name || 'None'}</div>
-          <div class="small">${describeLoot(p.weapon||{})}</div>
+          <div class="card-row">
+            <div>
+              <div class="item-name">${p.weapon?.name || 'None'}</div>
+              <div class="small">${describeLoot(p.weapon||{})}</div>
+            </div>
+          </div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Passives</strong>
-          ${(p.passives.length? p.passives.map((pa)=>`<div>${pa.name} (${describeLoot(pa)})</div>`).join(''):'None')}
+          <div class="pill-row">${(p.passives.length? p.passives.map((pa)=>`<span class="pill subtle">${pa.name}</span>`).join(''):'<span class="small">None</span>')}</div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Items</strong>
-          ${(p.items.length? p.items.map((i)=>`<div>${i.name}</div>`).join(''):'None')}
+          <div class="inventory-grid">
+            ${(p.items.length? p.items.map((i,idx)=>`<div class="inventory-card">
+              <div class="item-header">${i.name}</div>
+              <div class="small">${describeLoot(i)}</div>
+              <button data-index="${idx}" class="use-btn">Use</button>
+            </div>`).join(''):'<span class="small">No items</span>')}
+          </div>
         </div>
       </div>
     </div>`;
+  panel.querySelectorAll('.use-btn').forEach((b)=>b.onclick=()=>useItem(parseInt(b.dataset.index)));
 }
 
 function renderMapPanel(){
@@ -847,6 +1129,12 @@ function renderSettingsPanel(){
   };
 }
 
+function resetDayProgress(date){
+  state.player.completedRooms = state.player.completedRooms.filter((d)=>d!==date);
+  state.player.failedRooms = state.player.failedRooms.filter((d)=>d!==date);
+  savePlayer();
+}
+
 function setActionBar(){
   const bar = qs('#actionBar');
   bar.innerHTML = '';
@@ -860,6 +1148,11 @@ function setActionBar(){
   interact.textContent = 'Interact';
   interact.onclick = ()=>openPuzzle();
   bar.append(attack, interact);
+}
+
+function clearActionBar(){
+  const bar = qs('#actionBar');
+  if (bar) bar.innerHTML = '';
 }
 
 function nearestEnemy(){
@@ -878,7 +1171,7 @@ function renderEditorPanel(){
     <div class="section-card">
       <h2>Owner Editor</h2>
       <div class="button-row">
-        <label>Date<input id="edDate" type="date" value="${todayStr}"></label>
+        <div class="pill subtle">Editing: ${state.selectedDate}</div>
         <label>Type
           <select id="edType">
             <option value="combat">combat</option>
@@ -887,6 +1180,8 @@ function renderEditorPanel(){
             <option value="boss">boss</option>
           </select>
         </label>
+        <label class="short">Width<input type="number" id="edWidth" min="3" value="10"></label>
+        <label class="short">Height<input type="number" id="edHeight" min="3" value="8"></label>
       </div>
       <label>Room Name<input id="edName"></label>
       <label>Intro Text<textarea id="edIntro"></textarea></label>
@@ -904,10 +1199,13 @@ function renderEditorPanel(){
   buildPalette();
   buildEditorGrid();
   renderExtraConfig();
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  if (widthInput) widthInput.addEventListener('change', resizeEditorGridFromInputs);
+  if (heightInput) heightInput.addEventListener('change', resizeEditorGridFromInputs);
   qs('#saveRoom').onclick = saveEditorRoom;
   qs('#showJson').onclick = previewJson;
-  qs('#edDate').addEventListener('change', (e)=> loadEditorRoom(e.target.value));
-  loadEditorRoom(todayStr);
+  loadEditorRoom(state.selectedDate);
 }
 
 function buildPalette(){
@@ -933,23 +1231,50 @@ function buildPalette(){
 
 function buildEditorGrid(prefill){
   const g = qs('#editorGrid');
-  const grid = prefill || Array.from({length:8},()=>Array.from({length:10},()=>'.'));
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  const fallback = Array.from({length:8},()=>Array.from({length:10},()=>'.'));
+  let grid = prefill || fallback;
   const h = grid.length; const w = grid[0]?.length || 10;
-  g.style.gridTemplateColumns = `repeat(${w}, 28px)`;
+  if (widthInput) widthInput.value = w;
+  if (heightInput) heightInput.value = h;
+  g.classList.add('grid-labeled');
+  g.style.gridTemplateColumns = `32px repeat(${w}, 28px)`;
+  g.style.gridTemplateRows = `24px repeat(${h}, 28px)`;
   g.innerHTML = '';
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+  for(let y=-1;y<h;y++) for(let x=-1;x<w;x++){
     const cell=document.createElement('div');
-    cell.dataset.x=x; cell.dataset.y=y;
-    updateEditorCell(cell, grid[y][x]);
-    cell.onclick=()=>{
-      const key = qs('#palette').dataset.current || '.';
-      grid[y][x]=key;
-      updateEditorCell(cell, key);
-      g.dataset.grid = JSON.stringify(grid);
-    };
+    if (x===-1 && y===-1) {
+      cell.className='label-cell corner';
+    } else if (y===-1) {
+      cell.className='label-cell column-label';
+      cell.textContent = x+1;
+    } else if (x===-1) {
+      cell.className='label-cell row-label';
+      cell.textContent = y+1;
+    } else {
+      cell.dataset.x=x; cell.dataset.y=y;
+      updateEditorCell(cell, grid[y][x]);
+      cell.onclick=()=>{
+        const key = qs('#palette').dataset.current || '.';
+        grid[y][x]=key;
+        updateEditorCell(cell, key);
+        g.dataset.grid = JSON.stringify(grid);
+      };
+    }
     g.appendChild(cell);
   }
   g.dataset.grid = JSON.stringify(grid);
+}
+
+function resizeEditorGridFromInputs(){
+  const current = gatherEditorGrid();
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  const newW = Math.max(3, parseInt(widthInput?.value,10) || current[0]?.length || 10);
+  const newH = Math.max(3, parseInt(heightInput?.value,10) || current.length || 8);
+  const resized = Array.from({length:newH}, (_,y)=>Array.from({length:newW},(_,x)=>current[y]?.[x] || '.'));
+  buildEditorGrid(resized);
 }
 
 function updateEditorCell(cell, key){
@@ -1044,7 +1369,6 @@ async function loadEditorRoom(date){
     qs('#puzzleList').innerHTML='';
     qs('#trapList').innerHTML='';
   }
-  qs('#edDate').value = date;
 }
 
 function gatherEditorGrid(){
@@ -1054,7 +1378,7 @@ function gatherEditorGrid(){
 
 function saveEditorRoom(){
   const grid = gatherEditorGrid();
-  const date = qs('#edDate').value;
+  const date = state.selectedDate;
   const width = grid[0]?.length || 10;
   const height = grid.length || 8;
   const entities = [];

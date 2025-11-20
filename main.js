@@ -60,7 +60,7 @@ const ROOM_DEFINITIONS = [
   }
 ];
 
-const ENEMIES = {
+const DEFAULT_ENEMIES = {
   'Goblin Cutthroat': { hp: 10, attack: 4, defense: 1, crit: 0.1 },
   'Skeleton Guard': { hp: 14, attack: 3, defense: 3, crit: 0.05 },
   'Cave Slime': { hp: 18, attack: 2, defense: 0, crit: 0.02 },
@@ -68,9 +68,7 @@ const ENEMIES = {
   'Ironbound Archer': { hp: 16, attack: 6, defense: 1, crit: 0.1 },
 };
 
-const BOSSES = ['The Hollow Knight', 'Maw of Cinders', 'Oracle of Dust'];
-
-const LOOT = {
+const DEFAULT_LOOT = {
   weapons: [
     { name: 'Rusty Dagger', attack: 1 },
     { name: 'Iron Longsword', attack: 3 },
@@ -94,6 +92,12 @@ const LOOT = {
   ],
 };
 
+const DEFAULT_BOSSES = ['The Hollow Knight', 'Maw of Cinders', 'Oracle of Dust'];
+
+let ENEMIES = { ...DEFAULT_ENEMIES };
+let LOOT = { ...DEFAULT_LOOT };
+let BOSSES = [...DEFAULT_BOSSES];
+
 const CLASSES = {
   Warrior: { strength: 8, dexterity: 4, wisdom: 3, vitality: 8 },
   Rogue: { strength: 4, dexterity: 8, wisdom: 4, vitality: 7 },
@@ -112,6 +116,48 @@ let state = {
   combatLog: [],
   effects: { tempAttack: 0, autoPuzzle: false, escape: false },
 };
+
+async function fetchJsonWithFallback(path) {
+  try {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (res.ok) return await res.json();
+  } catch (err) {
+    console.warn('Fetch failed, trying XHR for', path, err);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.overrideMimeType('application/json');
+      xhr.open('GET', path, true);
+      xhr.onload = () => {
+        if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
+          try { resolve(JSON.parse(xhr.responseText || 'null')); }
+          catch (e) { reject(e); }
+        } else {
+          reject(new Error('XHR status ' + xhr.status));
+        }
+      };
+      xhr.onerror = () => reject(new Error('XHR network error'));
+      xhr.send();
+    } catch (err) {
+      reject(err);
+    }
+  }).catch((err) => {
+    console.warn('Fallback load failed for', path, err);
+    return null;
+  });
+}
+
+async function loadStaticData() {
+  const [loot, enemies, bosses] = await Promise.all([
+    fetchJsonWithFallback('data/loot.json'),
+    fetchJsonWithFallback('data/enemies.json'),
+    fetchJsonWithFallback('data/bosses.json'),
+  ]);
+  LOOT = loot || DEFAULT_LOOT;
+  ENEMIES = enemies || DEFAULT_ENEMIES;
+  BOSSES = bosses || [...DEFAULT_BOSSES];
+}
 
 function getDerivedStats(includeEffects = true) {
   if (!state.player) return {};
@@ -260,8 +306,8 @@ async function loadRoomFromFile(date) {
   const saved = getSavedRoomFiles();
   if (saved[filename]) return saved[filename];
   try {
-    const res = await fetch(filename, { cache: 'no-store' });
-    if (res.ok) return await res.json();
+    const data = await fetchJsonWithFallback(filename);
+    if (data) return data;
   } catch (err) {
     console.warn('Room fetch failed for', filename, err);
   }
@@ -290,7 +336,8 @@ function persistRoomToFile(room) {
   }
 }
 
-function init() {
+async function init() {
+  await loadStaticData();
   if (ownerMode) {
     qsa('.owner-only').forEach((b) => (b.style.display = 'inline-flex'));
     setupOwnerDateControl();
@@ -516,23 +563,35 @@ function renderGrid() {
   const wrap = qs('#roomGrid');
   if (!wrap) return;
   const room = state.currentRoom;
-  wrap.style.gridTemplateColumns = `repeat(${room.gridWidth}, 28px)`;
+  wrap.classList.add('grid-labeled');
+  wrap.style.gridTemplateColumns = `32px repeat(${room.gridWidth}, 28px)`;
+  wrap.style.gridTemplateRows = `24px repeat(${room.gridHeight}, 28px)`;
   wrap.innerHTML = '';
-  for (let y = 0; y < room.gridHeight; y++) {
-    for (let x = 0; x < room.gridWidth; x++) {
-      const tile = state.grid[y][x];
+  for (let y = -1; y < room.gridHeight; y++) {
+    for (let x = -1; x < room.gridWidth; x++) {
       const cell = document.createElement('div');
-      cell.classList.add('cell');
-      cell.dataset.x = x; cell.dataset.y = y;
-      const ent = state.entities.find((e) => e.x === x && e.y === y);
-      if (tile === '#') cell.classList.add('tile-wall');
-      else if (tile === 'S') cell.classList.add('tile-puzzle');
-      else if (tile === 'T') cell.classList.add('tile-trap');
-      else if (tile === 'O') cell.classList.add('tile-obstacle');
-      else if (tile === 'E') cell.classList.add('tile-exit');
-      else cell.classList.add('tile-floor');
-      if (ent) cell.classList.add(entityClass(ent));
-      cell.textContent = ent ? entityGlyph(ent) : '';
+      if (x === -1 && y === -1) {
+        cell.className = 'label-cell corner';
+      } else if (y === -1) {
+        cell.className = 'label-cell column-label';
+        cell.textContent = x + 1;
+      } else if (x === -1) {
+        cell.className = 'label-cell row-label';
+        cell.textContent = y + 1;
+      } else {
+        const tile = state.grid[y][x];
+        cell.classList.add('cell');
+        cell.dataset.x = x; cell.dataset.y = y;
+        const ent = state.entities.find((e) => e.x === x && e.y === y);
+        if (tile === '#') cell.classList.add('tile-wall');
+        else if (tile === 'S') cell.classList.add('tile-puzzle');
+        else if (tile === 'T') cell.classList.add('tile-trap');
+        else if (tile === 'O') cell.classList.add('tile-obstacle');
+        else if (tile === 'E') cell.classList.add('tile-exit');
+        else cell.classList.add('tile-floor');
+        if (ent) cell.classList.add(entityClass(ent));
+        cell.textContent = ent ? entityGlyph(ent) : '';
+      }
       wrap.appendChild(cell);
     }
   }
@@ -1000,6 +1059,7 @@ function renderCharacterPanel(){
           <div class="stat-row"><span>Dexterity</span><span>${derived.dexterity}</span></div>
           <div class="stat-row"><span>Wisdom</span><span>${derived.wisdom}</span></div>
           <div class="stat-row"><span>Vitality</span><span>${derived.vitality}</span></div>
+          <div class="stat-divider" aria-hidden="true"></div>
           <div class="stat-row"><span>Attack</span><span>${derived.attack}</span></div>
           <div class="stat-row"><span>Defense</span><span>${derived.defense}</span></div>
           <div class="stat-row"><span>Crit</span><span>${derived.critChance}%</span></div>
@@ -1120,6 +1180,8 @@ function renderEditorPanel(){
             <option value="boss">boss</option>
           </select>
         </label>
+        <label class="short">Width<input type="number" id="edWidth" min="3" value="10"></label>
+        <label class="short">Height<input type="number" id="edHeight" min="3" value="8"></label>
       </div>
       <label>Room Name<input id="edName"></label>
       <label>Intro Text<textarea id="edIntro"></textarea></label>
@@ -1137,6 +1199,10 @@ function renderEditorPanel(){
   buildPalette();
   buildEditorGrid();
   renderExtraConfig();
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  if (widthInput) widthInput.addEventListener('change', resizeEditorGridFromInputs);
+  if (heightInput) heightInput.addEventListener('change', resizeEditorGridFromInputs);
   qs('#saveRoom').onclick = saveEditorRoom;
   qs('#showJson').onclick = previewJson;
   loadEditorRoom(state.selectedDate);
@@ -1165,23 +1231,50 @@ function buildPalette(){
 
 function buildEditorGrid(prefill){
   const g = qs('#editorGrid');
-  const grid = prefill || Array.from({length:8},()=>Array.from({length:10},()=>'.'));
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  const fallback = Array.from({length:8},()=>Array.from({length:10},()=>'.'));
+  let grid = prefill || fallback;
   const h = grid.length; const w = grid[0]?.length || 10;
-  g.style.gridTemplateColumns = `repeat(${w}, 28px)`;
+  if (widthInput) widthInput.value = w;
+  if (heightInput) heightInput.value = h;
+  g.classList.add('grid-labeled');
+  g.style.gridTemplateColumns = `32px repeat(${w}, 28px)`;
+  g.style.gridTemplateRows = `24px repeat(${h}, 28px)`;
   g.innerHTML = '';
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+  for(let y=-1;y<h;y++) for(let x=-1;x<w;x++){
     const cell=document.createElement('div');
-    cell.dataset.x=x; cell.dataset.y=y;
-    updateEditorCell(cell, grid[y][x]);
-    cell.onclick=()=>{
-      const key = qs('#palette').dataset.current || '.';
-      grid[y][x]=key;
-      updateEditorCell(cell, key);
-      g.dataset.grid = JSON.stringify(grid);
-    };
+    if (x===-1 && y===-1) {
+      cell.className='label-cell corner';
+    } else if (y===-1) {
+      cell.className='label-cell column-label';
+      cell.textContent = x+1;
+    } else if (x===-1) {
+      cell.className='label-cell row-label';
+      cell.textContent = y+1;
+    } else {
+      cell.dataset.x=x; cell.dataset.y=y;
+      updateEditorCell(cell, grid[y][x]);
+      cell.onclick=()=>{
+        const key = qs('#palette').dataset.current || '.';
+        grid[y][x]=key;
+        updateEditorCell(cell, key);
+        g.dataset.grid = JSON.stringify(grid);
+      };
+    }
     g.appendChild(cell);
   }
   g.dataset.grid = JSON.stringify(grid);
+}
+
+function resizeEditorGridFromInputs(){
+  const current = gatherEditorGrid();
+  const widthInput = qs('#edWidth');
+  const heightInput = qs('#edHeight');
+  const newW = Math.max(3, parseInt(widthInput?.value,10) || current[0]?.length || 10);
+  const newH = Math.max(3, parseInt(heightInput?.value,10) || current.length || 8);
+  const resized = Array.from({length:newH}, (_,y)=>Array.from({length:newW},(_,x)=>current[y]?.[x] || '.'));
+  buildEditorGrid(resized);
 }
 
 function updateEditorCell(cell, key){

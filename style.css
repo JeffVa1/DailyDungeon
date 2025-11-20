@@ -20,9 +20,15 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Seg
 .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
 input, select, textarea { background: #0f1020; border: 1px solid #30324f; color: #f4f4f4; padding: 8px; border-radius: 6px; width: 100%; }
 label { font-weight: 600; display: block; margin-bottom: 4px; }
+label.short { width: 120px; }
 textarea { min-height: 70px; }
 .grid { display: grid; gap: 2px; background: #0b0b16; padding: 8px; border-radius: 8px; border: 1px solid #20223a; margin-top: 8px; max-width: 100%; }
+.grid.grid-labeled { grid-auto-flow: row; }
 .cell { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px; }
+.label-cell { display: flex; align-items: center; justify-content: center; font-size: 11px; color: #9aa2c0; }
+.label-cell.column-label { border-bottom: 1px solid #20223a; }
+.label-cell.row-label { border-right: 1px solid #20223a; }
+.label-cell.corner { background: transparent; }
 .tile-floor { background: #1c1f35; }
 .tile-wall { background: #44475a; }
 .tile-obstacle { background: #3a2e2e; }
@@ -84,3 +90,4 @@ legend { padding: 0 6px; }
 .outcome-card.failed { border-color: #5a2e2e; }
 .outcome-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .nested-row { gap: 6px; }
+.stat-divider { border-top: 1px solid #2c2f4b; margin: 6px 0; }

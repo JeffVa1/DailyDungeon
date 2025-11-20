@@ -1,0 +1,23 @@
+{
+  "weapons": [
+    { "name": "Rusty Dagger", "attack": 1 },
+    { "name": "Iron Longsword", "attack": 3 },
+    { "name": "Ember Wand", "magic": 2 },
+    { "name": "Shadow Bow", "attack": 2, "crit": 3 },
+    { "name": "Ogre Smasher", "attack": 5, "defense": -1 }
+  ],
+  "passives": [
+    { "name": "Stone Skin", "defense": 2 },
+    { "name": "Quick Learner", "xp": 0.1 },
+    { "name": "Bloodthirst", "healOnKill": 2 },
+    { "name": "Arcane Wellspring", "magic": 3 },
+    { "name": "Nimble Reflexes", "dodge": 0.05 }
+  ],
+  "items": [
+    { "name": "Small Potion", "heal": 10 },
+    { "name": "Greater Potion", "heal": 20 },
+    { "name": "Battle Brew", "tempAttack": 2 },
+    { "name": "Smoke Bomb", "escape": true },
+    { "name": "Elixir of Clarity", "autoPuzzle": true }
+  ]
+}

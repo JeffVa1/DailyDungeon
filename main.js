@@ -295,8 +295,11 @@ function persistRoomToFile(room) {
 }
 
 function init() {
-  qs('#todayDisplay').textContent = todayStr;
-  if (ownerMode) qsa('.owner-only').forEach((b) => (b.style.display = 'inline-flex'));
+  if (ownerMode) {
+    qsa('.owner-only').forEach((b) => (b.style.display = 'inline-flex'));
+    setupOwnerDateControl();
+  }
+  refreshDateUI();
   attachTabEvents();
   loadPlayer();
   if (!state.player) {
@@ -306,6 +309,26 @@ function init() {
     refreshAllPanels();
   }
   initControls();
+}
+
+function setupOwnerDateControl() {
+  const container = qs('#ownerDateControl');
+  if (!container) return;
+  container.style.display = 'flex';
+  container.innerHTML = `
+    <label for="ownerDatePicker">Date</label>
+    <input type="date" id="ownerDatePicker" value="${state.selectedDate}">
+  `;
+  container.querySelector('#ownerDatePicker').addEventListener('change', (e) => {
+    setSelectedDate(e.target.value || todayStr);
+  });
+}
+
+function refreshDateUI() {
+  const todayEl = qs('#todayDisplay');
+  if (todayEl) todayEl.textContent = state.owner ? `Date: ${state.selectedDate}` : todayStr;
+  const picker = qs('#ownerDatePicker');
+  if (picker && picker.value !== state.selectedDate) picker.value = state.selectedDate;
 }
 
 function attachTabEvents() {
@@ -385,6 +408,13 @@ async function getRoomForDate(date) {
   return ROOM_DEFINITIONS.find((r) => r.date === date) || null;
 }
 
+function setSelectedDate(date) {
+  state.selectedDate = date || todayStr;
+  refreshDateUI();
+  if (state.activeTab === 'dungeon') renderDungeonPanel();
+  if (state.activeTab === 'editor') renderEditorPanel();
+}
+
 function buildGrid(room) {
   const grid = [];
   for (let y = 0; y < room.gridHeight; y++) {
@@ -401,32 +431,22 @@ function buildGrid(room) {
 
 async function renderDungeonPanel() {
   const panel = qs('#dungeon');
-  const dateControls = state.owner
-    ? `<div class="button-row">
-        <label>Play Date<input type="date" id="playDate" value="${state.selectedDate}"></label>
-        <div class="button-row nested-row">
-          <button id="loadDateRoom">Load Room</button>
-          <button id="restartDay">Restart Day</button>
-        </div>
-      </div>`
-    : '';
   if (!state.player) {
     panel.innerHTML = `<div class="section-card">Create a character to enter the dungeon.</div>`;
     return;
   }
+  const ownerActions = state.owner
+    ? `<div class="button-row"><div class="pill subtle">Date: ${state.selectedDate}</div><button id="restartDay">Restart Day</button></div>`
+    : '';
   panel.innerHTML = `<div class="section-card">
-    ${dateControls}
+    ${ownerActions}
     <div id="dungeonContent">Loading room...</div>
   </div>`;
   const targetDate = state.owner ? state.selectedDate : todayStr;
   const rawRoom = await getRoomForDate(targetDate);
   const room = rawRoom ? normalizeRoom(rawRoom) : null;
   const content = qs('#dungeonContent');
-  if (qs('#playDate')) {
-    qs('#playDate').onchange = (e) => {
-      state.selectedDate = e.target.value || todayStr;
-    };
-    qs('#loadDateRoom').onclick = () => renderDungeonPanel();
+  if (qs('#restartDay')) {
     qs('#restartDay').onclick = () => {
       resetDayProgress(targetDate);
       renderDungeonPanel();
@@ -584,14 +604,8 @@ function renderDpad() {
 }
 
 function openEditorForDate(date){
+  setSelectedDate(date);
   switchTab('editor');
-  setTimeout(()=>{
-    const dateInput = qs('#edDate');
-    if (dateInput) {
-      dateInput.value = date;
-      loadEditorRoom(date);
-    }
-  }, 50);
 }
 
 function initControls() {
@@ -602,6 +616,8 @@ function initControls() {
     if (['ArrowRight','d','D'].includes(e.key)) return handleMove('d');
     if (e.ctrlKey && e.key.toLowerCase() === 'o') {
       state.owner = true; qsa('.owner-only').forEach((b)=>b.style.display='inline-flex');
+      setupOwnerDateControl();
+      refreshDateUI();
       switchTab('editor');
     }
   });
@@ -1099,7 +1115,7 @@ function renderEditorPanel(){
     <div class="section-card">
       <h2>Owner Editor</h2>
       <div class="button-row">
-        <label>Date<input id="edDate" type="date" value="${todayStr}"></label>
+        <div class="pill subtle">Editing: ${state.selectedDate}</div>
         <label>Type
           <select id="edType">
             <option value="combat">combat</option>
@@ -1127,8 +1143,7 @@ function renderEditorPanel(){
   renderExtraConfig();
   qs('#saveRoom').onclick = saveEditorRoom;
   qs('#showJson').onclick = previewJson;
-  qs('#edDate').addEventListener('change', (e)=> loadEditorRoom(e.target.value));
-  loadEditorRoom(todayStr);
+  loadEditorRoom(state.selectedDate);
 }
 
 function buildPalette(){
@@ -1265,7 +1280,6 @@ async function loadEditorRoom(date){
     qs('#puzzleList').innerHTML='';
     qs('#trapList').innerHTML='';
   }
-  qs('#edDate').value = date;
 }
 
 function gatherEditorGrid(){
@@ -1275,7 +1289,7 @@ function gatherEditorGrid(){
 
 function saveEditorRoom(){
   const grid = gatherEditorGrid();
-  const date = qs('#edDate').value;
+  const date = state.selectedDate;
   const width = grid[0]?.length || 10;
   const height = grid.length || 8;
   const entities = [];

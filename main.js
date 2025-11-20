@@ -118,6 +118,10 @@ let state = {
 };
 
 async function fetchJsonWithFallback(path) {
+  if (location.protocol === 'file:') {
+    console.warn('Cannot fetch room files directly from disk. Please run the app from http(s) or use cached rooms.');
+    return null;
+  }
   try {
     const res = await fetch(path, { cache: 'no-store' });
     if (res.ok) return await res.json();
@@ -317,8 +321,10 @@ async function loadRoomFromFile(date) {
 function persistRoomToFile(room) {
   const filename = getRoomFilename(room.date);
   const files = getSavedRoomFiles();
+  const existed = Boolean(files[filename]);
   files[filename] = room;
   saveRoomFiles(files);
+  if (existed) return;
   try {
     const blob = new Blob([JSON.stringify(room, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -444,10 +450,10 @@ function renderCharacterCreation() {
 }
 
 async function getRoomForDate(date) {
-  const fileRoom = await loadRoomFromFile(date);
-  if (fileRoom) return fileRoom;
   const owners = getOwnerRooms();
   if (owners[date]) return owners[date];
+  const fileRoom = await loadRoomFromFile(date);
+  if (fileRoom) return fileRoom;
   return ROOM_DEFINITIONS.find((r) => r.date === date) || null;
 }
 

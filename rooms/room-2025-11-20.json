@@ -1,0 +1,71 @@
+{
+  "date": "2025-11-20",
+  "type": "combat",
+  "name": "Training Grounds",
+  "introText": "A compact room to practice your skills.",
+  "successText": "You catch your breath and spot the exit.",
+  "failureText": "You fall during practice — rest and return tomorrow.",
+  "gridWidth": 10,
+  "gridHeight": 7,
+  "tiles": [
+    "##########",
+    "#.......E#",
+    "#...O##..#",
+    "#........#",
+    "#........#",
+    "#........#",
+    "##########"
+  ],
+  "entities": [
+    {
+      "kind": "playerSpawn",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 6,
+      "y": 1
+    },
+    {
+      "kind": "exit",
+      "x": 8,
+      "y": 1
+    },
+    {
+      "kind": "enemy",
+      "enemyType": "Goblin Cutthroat",
+      "x": 3,
+      "y": 4
+    }
+  ],
+  "puzzleConfigs": [
+    {
+      "x": 3,
+      "y": 4,
+      "question": "Solve: 2+2?",
+      "options": [
+        "1",
+        "3",
+        "4"
+      ],
+      "answer": 2
+    }
+  ],
+  "trapConfigs": [],
+  "bossConfig": {
+    "name": "The Hollow Knight"
+  },
+  "puzzleConfig": {
+    "x": 3,
+    "y": 4,
+    "question": "Solve: 2+2?",
+    "options": [
+      "1",
+      "3",
+      "4"
+    ],
+    "answer": 2
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "date": "2025-11-22",
+  "type": "combat",
+  "name": "Trap test",
+  "introText": "test",
+  "successText": "success",
+  "failureText": "fail",
+  "gridWidth": 5,
+  "gridHeight": 3,
+  "tiles": [
+    "....E",
+    "..T..",
+    "....."
+  ],
+  "entities": [
+    {
+      "kind": "playerSpawn",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "kind": "exit",
+      "x": 4,
+      "y": 0
+    }
+  ],
+  "puzzleConfigs": [],
+  "trapConfigs": [],
+  "bossConfig": {
+    "name": "The Hollow Knight"
+  }
+}

@@ -259,10 +259,6 @@ async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
   const saved = getSavedRoomFiles();
   if (saved[filename]) return saved[filename];
-  const canFetch = ['http:', 'https:'].includes(location.protocol);
-  if (!canFetch) {
-    return null;
-  }
   try {
     const res = await fetch(filename, { cache: 'no-store' });
     if (res.ok) return await res.json();

@@ -2,6 +2,9 @@ const qs = (sel) => document.querySelector(sel);
 const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 const todayStr = new Date().toISOString().split('T')[0];
 const ownerMode = location.search.includes('owner=1');
+const ROOM_FILE_PREFIX = 'room-';
+const ROOM_FILE_FOLDER = 'rooms';
+const ROOM_FILE_EXTENSION = '.json';
 
 const ROOM_DEFINITIONS = [
   {
@@ -100,6 +103,7 @@ const CLASSES = {
 let state = {
   player: null,
   currentRoom: null,
+  selectedDate: todayStr,
   grid: [],
   entities: [],
   playerPos: { x: 0, y: 0 },
@@ -132,6 +136,54 @@ function getOwnerRooms() {
 
 function saveOwnerRooms(obj) {
   localStorage.setItem('dd_owner_rooms', JSON.stringify(obj));
+}
+
+function getSavedRoomFiles() {
+  const raw = localStorage.getItem('dd_room_files');
+  return raw ? JSON.parse(raw) : {};
+}
+
+function saveRoomFiles(obj) {
+  localStorage.setItem('dd_room_files', JSON.stringify(obj));
+}
+
+function getRoomFilename(date) {
+  return `${ROOM_FILE_FOLDER}/${ROOM_FILE_PREFIX}${date}${ROOM_FILE_EXTENSION}`;
+}
+
+async function loadRoomFromFile(date) {
+  const filename = getRoomFilename(date);
+  const saved = getSavedRoomFiles();
+  if (saved[filename]) return saved[filename];
+  try {
+    const res = await fetch(filename, { cache: 'no-store' });
+    if (res.ok) return await res.json();
+  } catch (err) {
+    console.warn('Room fetch failed for', filename, err);
+  }
+  return null;
+}
+
+function persistRoomToFile(room) {
+  const filename = getRoomFilename(room.date);
+  const files = getSavedRoomFiles();
+  files[filename] = room;
+  saveRoomFiles(files);
+  try {
+    const blob = new Blob([JSON.stringify(room, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${ROOM_FILE_PREFIX}${room.date}${ROOM_FILE_EXTENSION}`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1000);
+  } catch (err) {
+    console.warn('Download failed', err);
+  }
 }
 
 function init() {
@@ -217,10 +269,12 @@ function renderCharacterCreation() {
   };
 }
 
-function getTodayRoom() {
+async function getRoomForDate(date) {
+  const fileRoom = await loadRoomFromFile(date);
+  if (fileRoom) return fileRoom;
   const owners = getOwnerRooms();
-  if (owners[todayStr]) return owners[todayStr];
-  return ROOM_DEFINITIONS.find((r) => r.date === todayStr);
+  if (owners[date]) return owners[date];
+  return ROOM_DEFINITIONS.find((r) => r.date === date) || null;
 }
 
 function buildGrid(room) {
@@ -237,29 +291,47 @@ function buildGrid(room) {
   return grid;
 }
 
-function renderDungeonPanel() {
+async function renderDungeonPanel() {
   const panel = qs('#dungeon');
-  const room = getTodayRoom();
+  const dateControls = state.owner
+    ? `<div class="button-row">
+        <label>Play Date<input type="date" id="playDate" value="${state.selectedDate}"></label>
+        <button id="loadDateRoom">Load Room</button>
+      </div>`
+    : '';
   if (!state.player) {
     panel.innerHTML = `<div class="section-card">Create a character to enter the dungeon.</div>`;
     return;
   }
+  panel.innerHTML = `<div class="section-card">
+    ${dateControls}
+    <div id="dungeonContent">Loading room...</div>
+  </div>`;
+  const targetDate = state.owner ? state.selectedDate : todayStr;
+  const room = await getRoomForDate(targetDate);
+  const content = qs('#dungeonContent');
+  if (qs('#playDate')) {
+    qs('#playDate').onchange = (e) => {
+      state.selectedDate = e.target.value || todayStr;
+    };
+    qs('#loadDateRoom').onclick = () => renderDungeonPanel();
+  }
   if (!room) {
-    panel.innerHTML = `<div class="section-card">No dungeon defined for today.</div>`;
+    content.innerHTML = `<div class="section-card">No dungeon defined for ${targetDate}. ${state.owner ? 'Opening owner editor for this date.' : ''}</div>`;
+    if (state.owner) openEditorForDate(targetDate);
     return;
   }
   state.currentRoom = JSON.parse(JSON.stringify(room));
   state.grid = buildGrid(room);
   initEntities(room);
-  panel.innerHTML = `
-    <div class="section-card">
+  content.innerHTML = `
       <h2>${room.name}</h2>
       <p class="small">${room.introText}</p>
       <div id="roomGrid" class="grid"></div>
       <div class="status-row" id="statusRow"></div>
       <div id="log" class="small"></div>
       <div class="dpad" id="dpad"></div>
-    </div>`;
+    `;
   renderGrid();
   renderStatus();
   renderDpad();
@@ -353,6 +425,17 @@ function renderDpad() {
   });
 }
 
+function openEditorForDate(date){
+  switchTab('editor');
+  setTimeout(()=>{
+    const dateInput = qs('#edDate');
+    if (dateInput) {
+      dateInput.value = date;
+      loadEditorRoom(date);
+    }
+  }, 50);
+}
+
 function initControls() {
   window.addEventListener('keydown', (e) => {
     if (['ArrowUp','w','W'].includes(e.key)) return handleMove('w');
@@ -379,11 +462,12 @@ function handleMove(dir) {
   if (ent) {
     if (ent.kind === 'exit') return tryExit();
     if (['enemy','boss'].includes(ent.kind)) return resolveCombat(ent);
-    if (ent.kind === 'puzzle') return openPuzzle();
+    if (ent.kind === 'puzzle') return openPuzzle(ent);
   }
   state.playerPos = { x: nx, y: ny };
   const playerEntity = state.entities.find((e) => e.kind === 'player');
   if (playerEntity) { playerEntity.x = nx; playerEntity.y = ny; }
+  if (tile === 'T') return triggerTrap(nx, ny);
   enemyTurn();
   renderGrid();
 }
@@ -457,7 +541,9 @@ function tryExit() {
   onSuccess();
 }
 
-function openPuzzle() {
+function openPuzzle(ent) {
+  const target = ent || state.entities.find((e)=>e.kind==='puzzle' && e.x===state.playerPos.x && e.y===state.playerPos.y);
+  if (!target) return;
   const config = state.currentRoom.puzzleConfig || { question:'Solve: 2+2?', options:['1','3','4'], answer:2 };
   let attempts = 3;
   const modal = qs('#modal');
@@ -478,10 +564,19 @@ function openPuzzle() {
   }
   function finish(success) {
     modal.classList.add('hidden');
-    if (success) { log('Puzzle solved!'); state.grid[state.playerPos.y][state.playerPos.x]='.'; renderGrid(); }
+    if (success) {
+      log('Puzzle solved!');
+      clearPuzzleTile(target.x, target.y);
+    }
     else onFailure();
   }
   render();
+}
+
+function clearPuzzleTile(x,y){
+  state.grid[y][x]='.';
+  state.entities = state.entities.filter((e)=>!(e.kind==='puzzle' && e.x===x && e.y===y));
+  renderGrid();
 }
 
 function hasItem(name){
@@ -492,9 +587,48 @@ function hasPassive(name){
   return state.player.passives.some((p)=>p.name===name);
 }
 
+function triggerTrap(x,y){
+  const config = state.currentRoom.trapConfig || { dc: 12, damage: 5, intro: 'A trap springs!' };
+  const modal = qs('#modal');
+  const content = qs('#modalContent');
+  const approaches = [
+    { label:'Agile', bonus: state.player.class==='Rogue'?3:1 },
+    { label:'Forceful', bonus: state.player.class==='Warrior'?3:1 },
+    { label:'Careful', bonus: state.player.class==='Mage'?3:1 },
+  ];
+  modal.classList.remove('hidden');
+  function render(){
+    content.innerHTML = `
+      <h3>Trap!</h3>
+      <p>${config.intro || 'A hidden trap triggers.'}</p>
+      <p class="small">DC ${config.dc} | Damage ${config.damage}</p>
+      <div class="button-row">${approaches.map((a,i)=>`<button data-i="${i}">${a.label}</button>`).join('')}</div>
+    `;
+    content.querySelectorAll('button').forEach((b)=>b.onclick=()=>roll(parseInt(b.dataset.i)));
+  }
+  function roll(index){
+    const pick = approaches[index];
+    const d20 = Math.ceil(Math.random()*20);
+    const total = d20 + pick.bonus;
+    const success = total >= config.dc;
+    modal.classList.add('hidden');
+    state.grid[y][x]='.';
+    log(`Trap roll ${total} (${pick.label}) ${success?'succeeds':'fails'}.`);
+    if (!success) {
+      state.player.stats.hpCurrent -= config.damage;
+      if (state.player.stats.hpCurrent <=0){ state.player.stats.hpCurrent=0; onFailure(); }
+    }
+    renderStatus();
+    renderGrid();
+    if (state.player.stats.hpCurrent>0){ enemyTurn(); renderGrid(); }
+  }
+  render();
+}
+
 function onSuccess() {
   log(state.currentRoom.successText);
-  state.player.completedRooms.push(todayStr);
+  const date = state.currentRoom?.date || todayStr;
+  if (!state.player.completedRooms.includes(date)) state.player.completedRooms.push(date);
   grantXP(30);
   offerLoot();
   savePlayer();
@@ -502,7 +636,8 @@ function onSuccess() {
 
 function onFailure() {
   log(state.currentRoom.failureText);
-  state.player.failedRooms.push(todayStr);
+  const date = state.currentRoom?.date || todayStr;
+  if (!state.player.failedRooms.includes(date)) state.player.failedRooms.push(date);
   savePlayer();
   alert('You have been defeated. Try again tomorrow.');
 }
@@ -708,6 +843,8 @@ function renderEditorPanel(){
   renderExtraConfig();
   qs('#saveRoom').onclick = saveEditorRoom;
   qs('#showJson').onclick = previewJson;
+  qs('#edDate').addEventListener('change', (e)=> loadEditorRoom(e.target.value));
+  loadEditorRoom(todayStr);
 }
 
 function buildPalette(){
@@ -731,32 +868,36 @@ function buildPalette(){
   });
 }
 
-function buildEditorGrid(){
+function buildEditorGrid(prefill){
   const g = qs('#editorGrid');
-  const w = 10, h = 8;
+  const grid = prefill || Array.from({length:8},()=>Array.from({length:10},()=>'.'));
+  const h = grid.length; const w = grid[0]?.length || 10;
   g.style.gridTemplateColumns = `repeat(${w}, 28px)`;
-  const tempGrid = Array.from({length:h},()=>Array.from({length:w},()=>'.'));
   g.innerHTML = '';
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){
     const cell=document.createElement('div');
-    cell.className='cell tile-floor';
     cell.dataset.x=x; cell.dataset.y=y;
+    updateEditorCell(cell, grid[y][x]);
     cell.onclick=()=>{
       const key = qs('#palette').dataset.current || '.';
-      tempGrid[y][x]=key;
-      cell.textContent=key==='P'?'P': key==='G'?'G': key==='B'?'B':'';
-      cell.className='cell';
-      if (key==='#') cell.classList.add('tile-wall');
-      else if (key==='O') cell.classList.add('tile-obstacle');
-      else if (key==='E') cell.classList.add('tile-exit');
-      else if (key==='T') cell.classList.add('tile-trap');
-      else if (key==='S') cell.classList.add('tile-puzzle');
-      else cell.classList.add('tile-floor');
-      g.dataset.grid = JSON.stringify(tempGrid);
+      grid[y][x]=key;
+      updateEditorCell(cell, key);
+      g.dataset.grid = JSON.stringify(grid);
     };
     g.appendChild(cell);
   }
-  g.dataset.grid = JSON.stringify(tempGrid);
+  g.dataset.grid = JSON.stringify(grid);
+}
+
+function updateEditorCell(cell, key){
+  cell.textContent=key==='P'?'P': key==='G'?'G': key==='B'?'B':'';
+  cell.className='cell';
+  if (key==='#') cell.classList.add('tile-wall');
+  else if (key==='O') cell.classList.add('tile-obstacle');
+  else if (key==='E') cell.classList.add('tile-exit');
+  else if (key==='T') cell.classList.add('tile-trap');
+  else if (key==='S') cell.classList.add('tile-puzzle');
+  else cell.classList.add('tile-floor');
 }
 
 function renderExtraConfig(){
@@ -768,6 +909,38 @@ function renderExtraConfig(){
     <label>Trap Damage<input id="edTrapDmg" type="number" value="5"></label>
     <label>Boss Type<select id="edBoss">${BOSSES.map((b)=>`<option value="${b}">${b}</option>`).join('')}</select></label>
   `;
+}
+
+async function loadEditorRoom(date){
+  const room = await getRoomForDate(date);
+  if (room) {
+    qs('#edType').value = room.type;
+    qs('#edName').value = room.name;
+    qs('#edIntro').value = room.introText;
+    qs('#edSuccess').value = room.successText;
+    qs('#edFailure').value = room.failureText;
+    qs('#edPuzzleQ').value = room.puzzleConfig?.question || '';
+    qs('#edPuzzleA').value = room.puzzleConfig?.answer ?? '';
+    qs('#edTrapDC').value = room.trapConfig?.dc ?? 12;
+    qs('#edTrapDmg').value = room.trapConfig?.damage ?? 5;
+    qs('#edBoss').value = room.bossConfig?.name || BOSSES[0];
+    const tileGrid = room.tiles.map((row)=>row.split(''));
+    room.entities.forEach((ent)=>{
+      if (ent.kind==='playerSpawn') tileGrid[ent.y][ent.x]='P';
+      if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='G';
+      if (ent.kind==='boss') tileGrid[ent.y][ent.x]='B';
+    });
+    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','G','B'].includes(c)?c:'.')));
+  } else {
+    buildEditorGrid();
+    qs('#edName').value = '';
+    qs('#edIntro').value = '';
+    qs('#edSuccess').value = '';
+    qs('#edFailure').value = '';
+    qs('#edPuzzleQ').value = '';
+    qs('#edPuzzleA').value = '';
+  }
+  qs('#edDate').value = date;
 }
 
 function gatherEditorGrid(){
@@ -803,6 +976,7 @@ function saveEditorRoom(){
   };
   const rooms = getOwnerRooms();
   rooms[date]=room; saveOwnerRooms(rooms);
+  persistRoomToFile(room);
   alert('Room saved for '+date);
 }
 

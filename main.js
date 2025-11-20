@@ -117,6 +117,7 @@ let state = {
   combatLog: [],
   effects: { tempAttack: 0, autoPuzzle: false, escape: false },
   lastDeath: null,
+  lockedOutDate: null,
 };
 
 async function fetchJsonWithFallback(path) {
@@ -274,6 +275,21 @@ function loadDeathRecord() {
   return data ? JSON.parse(data) : null;
 }
 
+function loadLockoutDate() {
+  return localStorage.getItem('dd_lockout_date');
+}
+
+function saveLockoutDate(date) {
+  if (!date) return;
+  localStorage.setItem('dd_lockout_date', date);
+  state.lockedOutDate = date;
+}
+
+function clearLockoutDate() {
+  localStorage.removeItem('dd_lockout_date');
+  state.lockedOutDate = null;
+}
+
 function saveDeathRecord(record) {
   if (!record) return;
   localStorage.setItem('dd_death_record', JSON.stringify(record));
@@ -372,6 +388,10 @@ async function init() {
   refreshDateUI();
   attachTabEvents();
   state.lastDeath = loadDeathRecord();
+  state.lockedOutDate = loadLockoutDate();
+  if (state.lockedOutDate && state.lockedOutDate !== todayStr) {
+    clearLockoutDate();
+  }
   loadPlayer();
   if (!state.player) {
     renderCharacterCreation();
@@ -569,6 +589,27 @@ async function renderDungeonPanel() {
       ? renderLossSummary(state.lastDeath, { footer: '<p class="small">Create a new character to continue.</p>' })
       : '';
     panel.innerHTML = summary || `<div class="section-card">Create a character to enter the dungeon.</div>`;
+    return;
+  }
+  if (state.lockedOutDate && state.lockedOutDate !== todayStr) {
+    clearLockoutDate();
+  }
+  if (!state.owner && state.lockedOutDate === todayStr) {
+    panel.innerHTML = `
+      <div class="section-card">
+        <div class="outcome-card failed">
+          <div class="outcome-header">
+            <div>
+              <p class="small">${todayStr}</p>
+              <h2>Today's dungeon is locked</h2>
+            </div>
+            <span class="pill">Return Tomorrow</span>
+          </div>
+          <p>You fell in today's dungeon. Rest and return tomorrow to start fresh.</p>
+          ${state.lastDeath ? renderLossSummary(state.lastDeath) : ''}
+        </div>
+      </div>`;
+    clearActionBar();
     return;
   }
   const ownerActions = state.owner
@@ -1140,6 +1181,7 @@ function buildDeathRecord(lossDate) {
 function finalizePlayerDeath(record) {
   state.lastDeath = record || state.lastDeath;
   if (record) saveDeathRecord(record);
+  saveLockoutDate(record?.lossDate || todayStr);
   localStorage.removeItem('dd_player');
   state.player = null;
   state.currentRoom = null;

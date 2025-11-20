@@ -2,7 +2,7 @@
   "weapons": [
     { "name": "Test", "attack": 1 },
     { "name": "Test", "attack": 3 },
-    { "name": "Test", "attack": 2 },
+    { "name": "Test", "attack": 2 }
   ],
   "passives": [
     { "name": "Stone Skin", "defense": 2 },

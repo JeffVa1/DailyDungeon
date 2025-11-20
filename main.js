@@ -118,12 +118,16 @@ let state = {
 };
 
 async function fetchJsonWithFallback(path) {
-  const url = resolveAssetUrl(path);
+  const url = path;
   try {
     const res = await fetch(url, { cache: 'no-store' });
-    if (res.ok) return await res.json();
+    if (!res.ok) {
+      console.warn(`Fetch failed for ${url} with status ${res.status}`);
+    } else {
+      return await res.json();
+    }
   } catch (err) {
-    console.warn('Fetch failed, trying XHR for', url, err);
+    console.warn('Fetch error for', url, err);
   }
   return new Promise((resolve, reject) => {
     try {
@@ -131,7 +135,7 @@ async function fetchJsonWithFallback(path) {
       xhr.overrideMimeType('application/json');
       xhr.open('GET', url, true);
       xhr.onload = () => {
-        if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
+        if (xhr.status >= 200 && xhr.status < 300) {
           try { resolve(JSON.parse(xhr.responseText || 'null')); }
           catch (e) { reject(e); }
         } else {
@@ -304,34 +308,18 @@ function getRoomFilename(date) {
 
 async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
-  const url = resolveAssetUrl(filename);
   const saved = getSavedRoomFiles();
   try {
-    const data = await fetchJsonWithFallback(url);
+    const data = await fetchJsonWithFallback(filename);
     if (data) {
       saved[filename] = data;
       saveRoomFiles(saved);
       return data;
     }
   } catch (err) {
-    console.warn('Room fetch failed for', url, err);
+    console.warn('Room fetch failed for', filename, err);
   }
   return saved[filename] || null;
-}
-
-function resolveAssetUrl(path) {
-  try {
-    const base = document.querySelector('base')?.href;
-    if (base) return new URL(path, base).toString();
-    const { origin, pathname } = window.location;
-    const dirPath = pathname.endsWith('/')
-      ? pathname
-      : pathname.substring(0, pathname.lastIndexOf('/') + 1);
-    return new URL(path, `${origin}${dirPath}`).toString();
-  } catch (err) {
-    console.warn('Failed to resolve asset URL for', path, err);
-    return path;
-  }
 }
 
 function persistRoomToFile(room) {

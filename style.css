@@ -61,3 +61,23 @@ legend { padding: 0 6px; }
 .config-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; padding: 6px; background: #101224; border: 1px solid #22263f; border-radius: 6px; }
 .config-row label { width: 140px; }
 .config-row button.remove-row { background: #40242a; border-color: #6a2f36; height: 38px; }
+.character-card { border: 1px solid #2c2f4b; box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+.header-row { display: flex; justify-content: space-between; align-items: center; }
+.pill { background: #2f3255; color: #dfe4ff; padding: 6px 10px; border-radius: 999px; font-size: 12px; border: 1px solid #4c5080; }
+.pill.subtle { background: #1f2136; color: #c3c8ff; border-color: #2f3255; }
+.info-block { background: #0f1020; border: 1px solid #242742; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.stat-row { display: flex; justify-content: space-between; background: #121429; padding: 6px 8px; border-radius: 6px; }
+.bar-row { display: flex; align-items: center; gap: 8px; }
+.card-row { background: #121429; padding: 8px; border-radius: 8px; border: 1px solid #1f2034; }
+.item-name { font-weight: 700; }
+.pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.inventory-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.inventory-card { background: #121429; border: 1px solid #242742; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.inventory-card .item-header { font-weight: 700; }
+.use-btn { background: #355c8a; border: 1px solid #4a7db6; color: #fff; padding: 8px; border-radius: 8px; cursor: pointer; }
+.use-btn:hover { background: #3e6aa3; }
+.outcome-card { border: 1px solid #2c2f4b; border-radius: 12px; padding: 14px; background: linear-gradient(135deg, #14162a, #101224); box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+.outcome-card.complete { border-color: #2e5a3a; }
+.outcome-card.failed { border-color: #5a2e2e; }
+.outcome-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.nested-row { gap: 6px; }

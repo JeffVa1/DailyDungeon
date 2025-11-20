@@ -110,6 +110,7 @@ let state = {
   activeTab: 'dungeon',
   owner: ownerMode,
   combatLog: [],
+  effects: { tempAttack: 0, autoPuzzle: false, escape: false },
 };
 
 function normalizeRoom(room) {
@@ -338,7 +339,10 @@ async function renderDungeonPanel() {
   const dateControls = state.owner
     ? `<div class="button-row">
         <label>Play Date<input type="date" id="playDate" value="${state.selectedDate}"></label>
-        <button id="loadDateRoom">Load Room</button>
+        <div class="button-row nested-row">
+          <button id="loadDateRoom">Load Room</button>
+          <button id="restartDay">Restart Day</button>
+        </div>
       </div>`
     : '';
   if (!state.player) {
@@ -358,12 +362,29 @@ async function renderDungeonPanel() {
       state.selectedDate = e.target.value || todayStr;
     };
     qs('#loadDateRoom').onclick = () => renderDungeonPanel();
+    qs('#restartDay').onclick = () => {
+      resetDayProgress(targetDate);
+      renderDungeonPanel();
+    };
   }
   if (!room) {
     content.innerHTML = `<div class="section-card">No dungeon defined for ${targetDate}. ${state.owner ? 'Opening owner editor for this date.' : ''}</div>`;
     if (state.owner) openEditorForDate(targetDate);
     return;
   }
+
+  const status = state.player.completedRooms.includes(targetDate)
+    ? 'complete'
+    : state.player.failedRooms.includes(targetDate)
+      ? 'failed'
+      : '';
+
+  if (status) {
+    renderOutcome(content, status, room, targetDate);
+    clearActionBar();
+    return;
+  }
+
   state.currentRoom = JSON.parse(JSON.stringify(room));
   state.grid = buildGrid(room);
   initEntities(room);
@@ -380,6 +401,34 @@ async function renderDungeonPanel() {
   renderDpad();
   state.combatLog = [];
   setActionBar();
+}
+
+function renderOutcome(container, status, room, date) {
+  const label = status === 'complete' ? 'Completed' : 'Failed';
+  const message = status === 'complete' ? room.successText : room.failureText;
+  const next = status === 'complete'
+    ? 'Come back tomorrow for a new challenge.'
+    : 'Rest up and return tomorrow to try again.';
+  container.innerHTML = `
+    <div class="outcome-card ${status}">
+      <div class="outcome-header">
+        <div>
+          <p class="small">${date}</p>
+          <h2>${room.name}</h2>
+        </div>
+        <span class="pill">${label}</span>
+      </div>
+      <p>${message}</p>
+      <p class="small">${next}</p>
+      ${state.owner ? '<button id="ownerRestart">Restart Day</button>' : ''}
+    </div>
+  `;
+  if (state.owner) {
+    qs('#ownerRestart').onclick = () => {
+      resetDayProgress(date);
+      renderDungeonPanel();
+    };
+  }
 }
 
 function renderGrid() {
@@ -503,6 +552,11 @@ function handleMove(dir) {
   if (['#','O'].includes(tile)) return;
   const ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
   if (ent) {
+    if (['enemy','boss'].includes(ent.kind) && state.effects.escape) {
+      log('You vanish in smoke, slipping past the foe.');
+      state.effects.escape = false;
+      state.entities = state.entities.filter((e) => e !== ent);
+    }
     if (ent.kind === 'exit') return tryExit();
     if (['enemy','boss'].includes(ent.kind)) return resolveCombat(ent);
     if (ent.kind === 'puzzle') return openPuzzle(ent);
@@ -525,7 +579,7 @@ function inBounds(x,y){
 function resolveCombat(enemy) {
   const player = state.player;
   const weaponBonus = player.weapon?.attack || 0;
-  const dmg = Math.max(1, (player.stats.attack + weaponBonus) - (enemy.kind==='boss'? enemy.defense || (4+player.level): ENEMIES[enemy.enemyType]?.defense || 1));
+  const dmg = Math.max(1, (player.stats.attack + weaponBonus + (state.effects.tempAttack || 0)) - (enemy.kind==='boss'? enemy.defense || (4+player.level): ENEMIES[enemy.enemyType]?.defense || 1));
   const crit = Math.random() < player.stats.critChance / 100;
   const dealt = crit ? dmg * 2 : dmg;
   enemy.hp -= dealt;
@@ -619,7 +673,7 @@ function openPuzzle(ent) {
     content.querySelectorAll('button').forEach((b)=>b.onclick=()=>choose(parseInt(b.dataset.i)));
   }
   function choose(i) {
-    if (config.autoSolve || hasItem('Elixir of Clarity')) { finish(true); return; }
+    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; return; }
     if (i === config.answer) finish(true); else { attempts--; if (attempts<=0) finish(false); else render(); }
   }
   function finish(success) {
@@ -695,6 +749,9 @@ function onSuccess() {
   grantXP(30);
   offerLoot();
   savePlayer();
+  const content = qs('#dungeonContent');
+  if (content && state.currentRoom) renderOutcome(content, 'complete', state.currentRoom, date);
+  clearActionBar();
 }
 
 function onFailure() {
@@ -702,7 +759,10 @@ function onFailure() {
   const date = state.currentRoom?.date || todayStr;
   if (!state.player.failedRooms.includes(date)) state.player.failedRooms.push(date);
   savePlayer();
+  const content = qs('#dungeonContent');
+  if (content && state.currentRoom) renderOutcome(content, 'failed', state.currentRoom, date);
   alert('You have been defeated. Try again tomorrow.');
+  clearActionBar();
 }
 
 function offerLoot() {
@@ -749,6 +809,35 @@ function describeLoot(l){
   return parts.join(', ');
 }
 
+function useItem(index){
+  const item = state.player.items[index];
+  if (!item) return;
+  let message = `${item.name} used.`;
+  if (item.heal) {
+    const before = state.player.stats.hpCurrent;
+    state.player.stats.hpCurrent = Math.min(state.player.stats.hpMax, state.player.stats.hpCurrent + item.heal);
+    const healed = state.player.stats.hpCurrent - before;
+    message = `Healed ${healed} HP.`;
+  }
+  if (item.tempAttack) {
+    state.effects.tempAttack = (state.effects.tempAttack || 0) + item.tempAttack;
+    message = `Attack increased by ${item.tempAttack} for this run.`;
+  }
+  if (item.escape) {
+    state.effects.escape = true;
+    message = 'You are ready to escape the next threat.';
+  }
+  if (item.autoPuzzle) {
+    state.effects.autoPuzzle = true;
+    message = 'The next puzzle will be solved automatically.';
+  }
+  state.player.items.splice(index,1);
+  log(message);
+  renderCharacterPanel();
+  renderStatus();
+  savePlayer();
+}
+
 function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
 function grantXP(amount){
@@ -782,32 +871,54 @@ function renderCharacterPanel(){
   const p = state.player;
   const panel = qs('#character');
   panel.innerHTML = `
-    <div class="section-card">
-      <h2>${p.name} (Lv ${p.level} ${p.class})</h2>
+    <div class="section-card character-card">
+      <div class="header-row">
+        <div>
+          <p class="small">${p.class}</p>
+          <h2>${p.name}</h2>
+        </div>
+        <div class="pill">Level ${p.level}</div>
+      </div>
       <div class="summary-grid">
-        <div>
-          <strong>Stats</strong>
-          <div>HP ${p.stats.hpCurrent}/${p.stats.hpMax}</div>
-          <div>ATK ${p.stats.attack}</div>
-          <div>DEF ${p.stats.defense}</div>
-          <div>MAG ${p.stats.magic}</div>
-          <div>CRIT ${p.stats.critChance}%</div>
+        <div class="info-block">
+          <strong>Vitals</strong>
+          <div class="bar-row">
+            <div class="health-bar">
+              <div class="health-fill" style="width:${(p.stats.hpCurrent/p.stats.hpMax)*100}%"></div>
+            </div>
+            <span class="small">${p.stats.hpCurrent}/${p.stats.hpMax} HP</span>
+          </div>
+          <div class="stat-row"><span>ATK</span><span>${p.stats.attack}</span></div>
+          <div class="stat-row"><span>DEF</span><span>${p.stats.defense}</span></div>
+          <div class="stat-row"><span>MAG</span><span>${p.stats.magic}</span></div>
+          <div class="stat-row"><span>CRIT</span><span>${p.stats.critChance}%</span></div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Weapon</strong>
-          <div>${p.weapon?.name || 'None'}</div>
-          <div class="small">${describeLoot(p.weapon||{})}</div>
+          <div class="card-row">
+            <div>
+              <div class="item-name">${p.weapon?.name || 'None'}</div>
+              <div class="small">${describeLoot(p.weapon||{})}</div>
+            </div>
+          </div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Passives</strong>
-          ${(p.passives.length? p.passives.map((pa)=>`<div>${pa.name} (${describeLoot(pa)})</div>`).join(''):'None')}
+          <div class="pill-row">${(p.passives.length? p.passives.map((pa)=>`<span class="pill subtle">${pa.name}</span>`).join(''):'<span class="small">None</span>')}</div>
         </div>
-        <div>
+        <div class="info-block">
           <strong>Items</strong>
-          ${(p.items.length? p.items.map((i)=>`<div>${i.name}</div>`).join(''):'None')}
+          <div class="inventory-grid">
+            ${(p.items.length? p.items.map((i,idx)=>`<div class="inventory-card">
+              <div class="item-header">${i.name}</div>
+              <div class="small">${describeLoot(i)}</div>
+              <button data-index="${idx}" class="use-btn">Use</button>
+            </div>`).join(''):'<span class="small">No items</span>')}
+          </div>
         </div>
       </div>
     </div>`;
+  panel.querySelectorAll('.use-btn').forEach((b)=>b.onclick=()=>useItem(parseInt(b.dataset.index)));
 }
 
 function renderMapPanel(){
@@ -847,6 +958,12 @@ function renderSettingsPanel(){
   };
 }
 
+function resetDayProgress(date){
+  state.player.completedRooms = state.player.completedRooms.filter((d)=>d!==date);
+  state.player.failedRooms = state.player.failedRooms.filter((d)=>d!==date);
+  savePlayer();
+}
+
 function setActionBar(){
   const bar = qs('#actionBar');
   bar.innerHTML = '';
@@ -860,6 +977,11 @@ function setActionBar(){
   interact.textContent = 'Interact';
   interact.onclick = ()=>openPuzzle();
   bar.append(attack, interact);
+}
+
+function clearActionBar(){
+  const bar = qs('#actionBar');
+  if (bar) bar.innerHTML = '';
 }
 
 function nearestEnemy(){

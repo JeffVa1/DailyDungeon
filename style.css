@@ -93,6 +93,9 @@ legend { padding: 0 6px; }
 .outcome-card.complete { border-color: #2e5a3a; }
 .outcome-card.failed { border-color: #5a2e2e; }
 .outcome-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.loss-card { border: 1px solid #5a2e2e; border-radius: 12px; padding: 14px; background: linear-gradient(160deg, #1b1524, #120f1c); box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+.loss-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.loss-grid .info-block { background: #100e19; }
 .nested-row { gap: 6px; }
 .stat-divider { border-top: 1px solid #2c2f4b; margin: 6px 0; }
 

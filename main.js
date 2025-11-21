@@ -1111,19 +1111,19 @@ function handleMove(dir) {
     setOverlayTile(nx, ny, '.');
     log('You unlock the door.');
   }
-  const ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
+  let ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
   if (ent) {
     if (['enemy','boss'].includes(ent.kind) && state.effects.escape) {
       log('You vanish in smoke, slipping past the foe.');
       state.effects.escape = false;
       state.entities = state.entities.filter((e) => e !== ent);
+      ent = null;
     }
-    if (ent.kind === 'exit') return tryExit();
-    if (['enemy','boss'].includes(ent.kind)) {
-      attemptPlayerAttack();
-      return advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
+    if (ent) {
+      if (ent.kind === 'exit') return tryExit();
+      if (['enemy','boss'].includes(ent.kind)) { log('An enemy blocks your path. Press Attack to fight.'); return; }
+      if (ent.kind === 'puzzle') return openPuzzle(ent);
     }
-    if (ent.kind === 'puzzle') return openPuzzle(ent);
   }
   state.playerPos = { x: nx, y: ny };
   const playerEntity = state.entities.find((e) => e.kind === 'player');
@@ -1138,7 +1138,7 @@ function handleMove(dir) {
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
   updateDoors();
-  advanceEnemiesAfterPlayerAction();
+  advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
 }
 
 function inBounds(x,y){
@@ -1190,7 +1190,7 @@ function enemyTurn() {
 
 function advanceEnemiesAfterPlayerAction(options = {}) {
   if (!state.player || state.player.stats.hpCurrent <= 0) return;
-  const { performPlayerAttack = true } = options;
+  const { performPlayerAttack = false } = options;
   updateDoors();
   if (performPlayerAttack) attemptPlayerAttack();
   enemyTurn();

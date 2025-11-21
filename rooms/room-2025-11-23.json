@@ -1,0 +1,83 @@
+{
+  "date": "2025-11-21",
+  "type": "puzzle",
+  "name": "Big Room",
+  "introText": "Huh a big room",
+  "successText": "Winner",
+  "failureText": "Loser",
+  "gridWidth": 12,
+  "gridHeight": 13,
+  "tiles": [
+    "...#...##C##",
+    "...O...##B##",
+    "...#...r...#",
+    "#O##.......#",
+    "...#########",
+    "...#....#...",
+    "...R..gK#.E.",
+    "...#....#...",
+    "#G#######BBB",
+    "............",
+    "............",
+    "#S#####S####",
+    "#b#####K####"
+  ],
+  "entities": [
+    {
+      "kind": "playerSpawn",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "kind": "exit",
+      "x": 10,
+      "y": 6
+    },
+    {
+      "kind": "puzzle",
+      "x": 1,
+      "y": 11
+    },
+    {
+      "kind": "puzzle",
+      "x": 7,
+      "y": 11
+    }
+  ],
+  "puzzleConfigs": [
+    {
+      "x": 1,
+      "y": 11,
+      "question": "What gets bigger the more you remove?",
+      "options": [
+        "Hole",
+        "Mole",
+        "Pole"
+      ],
+      "answer": 0
+    },
+    {
+      "x": 7,
+      "y": 11,
+      "question": "What's 9+10?",
+      "options": [
+        "18",
+        "19",
+        "21"
+      ],
+      "answer": 2
+    }
+  ],
+  "trapConfigs": [],
+  "puzzleConfig": {
+    "x": 1,
+    "y": 11,
+    "question": "What gets bigger the more you remove?",
+    "options": [
+      "Hole",
+      "Mole",
+      "Pole"
+    ],
+    "answer": 0
+  }
+}

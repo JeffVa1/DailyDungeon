@@ -1,6 +1,37 @@
 const qs = (sel) => document.querySelector(sel);
 const qsa = (sel) => Array.from(document.querySelectorAll(sel));
-const todayStr = new Date().toISOString().split('T')[0];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function getEasternDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = { year: '1970', month: '01', day: '01' };
+  formatter.formatToParts(date).forEach(({ type, value }) => {
+    if (type === 'year' || type === 'month' || type === 'day') {
+      parts[type] = value;
+    }
+  });
+  return parts;
+}
+
+function formatDateForEastern(date = new Date()) {
+  const { year, month, day } = getEasternDateParts(date);
+  return `${year}-${month}-${day}`;
+}
+
+function getEasternWeekdayIndex(date = new Date()) {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'long',
+  }).format(date);
+  return WEEKDAYS.indexOf(weekday);
+}
+
+const todayStr = formatDateForEastern();
 const ownerMode = location.search.includes('owner=1');
 const ROOM_FILE_PREFIX = 'room-';
 const ROOM_FILE_FOLDER = 'rooms';
@@ -262,11 +293,13 @@ function normalizeRoom(room) {
 }
 
 function getNextWeekdayDate(name) {
-  const target = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(name);
-  const now = new Date();
-  const diff = (target - now.getDay() + 7) % 7 || 7;
-  const next = new Date(now.getTime() + diff * 86400000);
-  return next.toISOString().split('T')[0];
+  const target = WEEKDAYS.indexOf(name);
+  if (target === -1) return formatDateForEastern();
+  const todayParts = getEasternDateParts();
+  const baseDate = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day));
+  const diff = (target - getEasternWeekdayIndex(baseDate) + 7) % 7 || 7;
+  const next = new Date(baseDate.getTime() + diff * 86400000);
+  return formatDateForEastern(next);
 }
 
 function savePlayer() {

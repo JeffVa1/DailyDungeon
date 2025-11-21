@@ -793,6 +793,7 @@ function renderGrid() {
           cell.classList.add(`tile-door-${color}${isDoorOpen(doorBase) ? '-open' : ''}`);
         }
         else if (displayTile === 'E') cell.classList.add('tile-exit');
+        else if (displayTile === 'P') { cell.classList.add('tile-floor'); cell.classList.add('entity-spawn'); }
         else cell.classList.add('tile-floor');
         if (ent) cell.classList.add(entityClass(ent));
         const glyph = ent ? entityGlyph(ent) : tileGlyph(baseTile, overlayTile);
@@ -812,7 +813,7 @@ function entityClass(ent) {
 }
 
 function entityGlyph(ent) {
-  if (ent.kind === 'player') return '🧭';
+  if (ent.kind === 'player') return '';
   if (ent.kind === 'enemy') return '⚔️';
   if (ent.kind === 'boss') return '👑';
   if (ent.kind === 'exit') return '🚪';
@@ -823,6 +824,8 @@ function entityGlyph(ent) {
 function tileGlyph(baseTile, overlayTile) {
   if (overlayTile === 'O') return '⬜';
   if (overlayTile !== '.') {
+    if (isPlateTile(overlayTile)) return '';
+    if (overlayTile === 'P') return '';
     if (isDoorTile(overlayTile)) {
       const color = doorColor(overlayTile);
       return color === 'red' ? '🟥' : color === 'blue' ? '🟦' : '🟩';
@@ -841,17 +844,15 @@ function tileGlyph(baseTile, overlayTile) {
       : color === 'blue' ? (state.doorState.blue ? openSymbol : '🟦')
       : state.doorState.green ? openSymbol : '🟩';
   }
-  if (isPlateTile(baseTile)) {
-    const color = plateColor(baseTile);
-    return color === 'red' ? '🔴' : color === 'blue' ? '🔵' : '🟢';
-  }
-  if (baseTile === '#') return '🧱';
+  if (isPlateTile(baseTile)) return '';
+  if (baseTile === '#') return '';
   if (baseTile === 'K') return '🔑';
   if (baseTile === 'L') return '🔒';
   if (baseTile === 'E') return '🚪';
   if (baseTile === 'T') return '⚠️';
   if (baseTile === 'S') return '✨';
-  return '·';
+  if (baseTile === 'P') return '';
+  return '';
 }
 
 function initEntities(room) {
@@ -1090,6 +1091,7 @@ function handleMove(dir) {
   if (!inBounds(nx, ny)) return;
   const tile = collisionTileAt(nx, ny);
   if (tile === '#') return;
+  if (isDoorTile(tile)) { log('The door is closed. Activate its plate to pass.'); return; }
   if (tile === 'O') {
     const pushX = nx + delta[0];
     const pushY = ny + delta[1];
@@ -1688,7 +1690,6 @@ function buildPalette(){
     { key: 'E', label:'Exit' },
     { key: 'T', label:'Trap' },
     { key: 'S', label:'Puzzle' },
-    { key: 'D', label:'Decoration' },
     { key: 'P', label:'Player Spawn' },
     { key: 'N', label:'Enemy' },
     { key: 'X', label:'Boss' }
@@ -1752,23 +1753,26 @@ function resizeEditorGridFromInputs(){
 
 function updateEditorCell(cell, key){
   const glyphMap = {
-    '#': '🧱',
+    '#': '',
+    '.': '',
     'O': '⬜',
     'K': '🔑',
     'L': '🔒',
     'R': '🟥',
     'B': '🟦',
     'G': '🟩',
-    'r': '🔴',
-    'b': '🔵',
-    'g': '🟢',
+    'r': '',
+    'b': '',
+    'g': '',
     'E': '🚪',
     'T': '⚠️',
     'S': '✨',
     'X': '👑',
     'N': '⚔️',
+    'P': '',
   };
-  cell.textContent = glyphMap[key] || (['P','N','X'].includes(key) ? key : '·');
+  const glyph = Object.prototype.hasOwnProperty.call(glyphMap, key) ? glyphMap[key] : '';
+  cell.textContent = glyph;
   cell.className='cell';
   if (key==='#') cell.classList.add('tile-wall');
   else if (key==='O') cell.classList.add('tile-pushable');
@@ -1781,6 +1785,7 @@ function updateEditorCell(cell, key){
   else if (['r','b','g'].includes(key)) cell.classList.add(`tile-plate-${plateColor(key)}`);
   else if (key==='X') cell.classList.add('entity-boss');
   else if (key==='N') cell.classList.add('entity-enemy');
+  else if (key==='P') cell.classList.add('entity-spawn');
   else cell.classList.add('tile-floor');
 }
 
@@ -1862,7 +1867,7 @@ async function loadEditorRoom(date){
       if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='N';
       if (ent.kind==='boss') tileGrid[ent.y][ent.x]='X';
     });
-    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','N','X','K','L','R','B','G','r','b','g'].includes(c)?c:'.')));
+    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','P','N','X','K','L','R','B','G','r','b','g'].includes(c)?c:'.')));
     const puzzleList = qs('#puzzleList');
     const trapList = qs('#trapList');
     puzzleList.innerHTML='';

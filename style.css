@@ -45,7 +45,6 @@ textarea { min-height: 70px; }
 .tile-exit { background: #2e5a3a; }
 .tile-trap { background: #5a2e2e; }
 .tile-puzzle { background: #2e3a5a; }
-.tile-decoration { background: #293143; }
 .entity-player { background: #3f7fbf; }
 .entity-enemy { background: #bf4b3f; }
 .entity-boss { background: #bf3fb2; }

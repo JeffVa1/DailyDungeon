@@ -120,6 +120,7 @@ let state = {
   lastDeath: null,
   lockedOutDate: null,
   doorState: { red: false, blue: false, green: false },
+  dungeonView: 'dungeon',
 };
 
 async function fetchJsonWithFallback(path) {
@@ -570,6 +571,20 @@ function setSelectedDate(date) {
   if (state.activeTab === 'editor') renderEditorPanel();
 }
 
+function resetDungeonState(date) {
+  if (state.currentRoom && state.currentRoom.date !== date) return;
+  state.currentRoom = null;
+  state.baseGrid = [];
+  state.grid = [];
+  state.entities = [];
+  state.playerPos = { x: 0, y: 0 };
+  state.keys = 0;
+  state.combatLog = [];
+  state.effects = { tempAttack: 0, autoPuzzle: false, escape: false };
+  state.doorState = { red: false, blue: false, green: false };
+  state.dungeonView = 'dungeon';
+}
+
 function initGrid(room) {
   const baseGrid = [];
   const overlayGrid = [];
@@ -704,26 +719,77 @@ async function renderDungeonPanel() {
     clearActionBar();
     return;
   }
+  const continuingRun = state.currentRoom && state.currentRoom.date === room.date && state.currentRoom.inProgress;
+  if (!continuingRun) {
+    state.currentRoom = JSON.parse(JSON.stringify({ ...room, inProgress: true }));
+    state.keys = 0;
+    state.effects = { tempAttack: 0, autoPuzzle: false, escape: false };
+    state.combatLog = [];
+    state.dungeonView = 'dungeon';
+    initGrid(state.currentRoom);
+    initEntities(state.currentRoom);
+    updateDoors();
+  }
 
-  state.currentRoom = JSON.parse(JSON.stringify(room));
-  state.keys = 0;
-  initGrid(room);
-  initEntities(room);
-  updateDoors();
   content.innerHTML = `
-      <div id="game-root" class="game-root">
-        <h2>${room.name}</h2>
-        <p class="small">${room.introText}</p>
-        <div id="roomGrid" class="grid"></div>
+      <div id="game-root" class="game-root ${state.dungeonView === 'inventory' ? 'inventory-open' : ''}">
+        <div class="dungeon-header">
+          <div>
+            <p class="pill subtle">${room.type.toUpperCase()}</p>
+            <h2>${room.name}</h2>
+            <p class="small">${room.introText}</p>
+          </div>
+          <div class="pill-row">
+            <span class="pill subtle">${state.owner ? state.selectedDate : todayStr}</span>
+            <span class="pill subtle">Level ${state.player.level}</span>
+          </div>
+        </div>
+        <div class="dungeon-body">
+          <div class="dungeon-grid ${state.dungeonView === 'inventory' ? 'hidden' : ''}">
+            <div id="roomGrid" class="grid"></div>
+          </div>
+          <div id="dungeonInventory" class="dungeon-inventory ${state.dungeonView === 'inventory' ? '' : 'hidden'}"></div>
+        </div>
+        <div class="dungeon-actions">
+          <div class="action-buttons">
+            <button id="attackBtn" class="primary">Attack</button>
+            <button id="inventoryToggle" class="ghost">${state.dungeonView === 'inventory' ? 'Back to Dungeon' : 'Inventory'}</button>
+          </div>
+          <div class="key-effects">
+            <div class="pill subtle">Keys: <span id="keyCount">${state.keys}</span></div>
+            <div id="effectTracker" class="effect-tracker"></div>
+          </div>
+        </div>
         <div class="status-row" id="statusRow"></div>
-        <div id="log" class="small"></div>
+        <div id="log" class="small log-panel"></div>
       </div>
     `;
+
   renderGrid();
+  renderDungeonInventory();
   renderStatus();
+  renderEffectTracker();
+  const logEl = qs('#log');
+  if (logEl && state.combatLog.length) {
+    logEl.innerHTML = state.combatLog.slice(-6).map((l)=>`<div>${l}</div>`).join('');
+  }
   setupSwipeControls();
-  state.combatLog = [];
-  setActionBar();
+
+  const attackBtn = qs('#attackBtn');
+  if (attackBtn) {
+    attackBtn.onclick = () => {
+      const attacked = attemptPlayerAttack();
+      if (!attacked) log('No enemy in range.');
+      advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
+    };
+  }
+  const invBtn = qs('#inventoryToggle');
+  if (invBtn) {
+    invBtn.onclick = () => {
+      state.dungeonView = state.dungeonView === 'inventory' ? 'dungeon' : 'inventory';
+      renderDungeonPanel();
+    };
+  }
 }
 
 function renderOutcome(container, status, room, date) {
@@ -881,13 +947,47 @@ function renderStatus() {
   if (!row) return;
   const player = state.player;
   const derived = getDerivedStats();
+  const keyCount = qs('#keyCount');
+  if (keyCount) keyCount.textContent = state.keys;
   row.innerHTML = `
-    <div>
-      <div>${player.name} (Lv ${player.level} ${player.class})</div>
+    <div class="status-card">
+      <div class="status-heading">
+        <div>
+          <div class="status-name">${player.name}</div>
+          <div class="small">Lv ${player.level} ${player.class}</div>
+        </div>
+        <div class="pill subtle">HP ${(player.stats.hpCurrent || 0)}/${derived.hpMax || 0}</div>
+      </div>
       <div class="health-bar"><div class="health-fill" style="width:${(player.stats.hpCurrent / (derived.hpMax || 1)) * 100}%"></div></div>
-      <div class="small">ATK ${derived.attack} | DEF ${derived.defense} | CRIT ${derived.critChance}%</div>
-      <div class="small">Keys: ${state.keys}</div>
+      <div class="small">ATK ${derived.attack} • DEF ${derived.defense} • CRIT ${derived.critChance}%</div>
     </div>`;
+  renderEffectTracker();
+}
+
+function getActiveEffects() {
+  const active = [];
+  if (state.effects.tempAttack) active.push({ label: `+${state.effects.tempAttack} ATK`, detail: 'Run-limited boost' });
+  if (state.effects.autoPuzzle) active.push({ label: 'Auto-solve', detail: 'Next puzzle is free' });
+  if (state.effects.escape) active.push({ label: 'Escape ready', detail: 'Skip one encounter' });
+  return active;
+}
+
+function renderEffectTracker() {
+  const tracker = qs('#effectTracker');
+  if (!tracker) return;
+  const active = getActiveEffects();
+  if (!active.length) {
+    tracker.innerHTML = '<span class="small muted">No active effects</span>';
+    return;
+  }
+  tracker.innerHTML = active
+    .map((e) => `
+      <div class="effect-pill">
+        <span class="pill subtle">${e.label}</span>
+        <span class="small">${e.detail}</span>
+      </div>
+    `)
+    .join('');
 }
 
 function renderDpad() {
@@ -1121,6 +1221,7 @@ function handleMove(dir) {
       state.effects.escape = false;
       state.entities = state.entities.filter((e) => e !== ent);
       ent = null;
+      renderEffectTracker();
     }
     if (ent) {
       if (ent.kind === 'exit') return tryExit();
@@ -1253,7 +1354,7 @@ function openPuzzle(ent) {
     content.querySelectorAll('button').forEach((b)=>b.onclick=()=>choose(parseInt(b.dataset.i)));
   }
   function choose(i) {
-    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; advanceEnemiesAfterPlayerAction(); return; }
+    if (config.autoSolve || state.effects.autoPuzzle) { finish(true); state.effects.autoPuzzle = false; renderEffectTracker(); advanceEnemiesAfterPlayerAction(); return; }
     if (i === config.answer) { finish(true); advanceEnemiesAfterPlayerAction(); }
     else {
       attempts--;
@@ -1410,6 +1511,8 @@ function finalizePlayerDeath(record) {
 }
 
 function onSuccess() {
+  if (state.currentRoom) state.currentRoom.inProgress = false;
+  state.dungeonView = 'dungeon';
   log(state.currentRoom.successText);
   const date = state.currentRoom?.date || todayStr;
   if (!state.player.completedRooms.includes(date)) state.player.completedRooms.push(date);
@@ -1505,6 +1608,8 @@ function useItem(index){
   log(message);
   renderCharacterPanel();
   renderStatus();
+  renderDungeonInventory();
+  renderEffectTracker();
   savePlayer();
 }
 
@@ -1530,9 +1635,35 @@ function levelUp(){
 }
 
 function log(msg){
+  if (!Array.isArray(state.combatLog)) state.combatLog = [];
   state.combatLog.push(msg);
   const logEl = qs('#log');
   if (logEl) logEl.innerHTML = state.combatLog.slice(-6).map((l)=>`<div>${l}</div>`).join('');
+}
+
+function renderDungeonInventory() {
+  const container = qs('#dungeonInventory');
+  if (!container) return;
+  const items = state.player?.items || [];
+  if (!items.length) {
+    container.innerHTML = '<div class="empty-state">No items in your pack.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="inventory-grid">
+      ${items
+        .map(
+          (i, idx) => `
+            <div class="inventory-card">
+              <div class="item-header">${i.name}</div>
+              <div class="small">${describeLoot(i)}</div>
+              <button data-index="${idx}" class="use-btn">Use</button>
+            </div>`
+        )
+        .join('')}
+    </div>
+  `;
+  container.querySelectorAll('.use-btn').forEach((b) => (b.onclick = () => useItem(parseInt(b.dataset.index, 10))));
 }
 
 function renderCharacterPanel(){
@@ -1639,23 +1770,13 @@ function renderSettingsPanel(){
 function resetDayProgress(date){
   state.player.completedRooms = state.player.completedRooms.filter((d)=>d!==date);
   state.player.failedRooms = state.player.failedRooms.filter((d)=>d!==date);
+  resetDungeonState(date);
   savePlayer();
 }
 
 function setActionBar(){
   const bar = qs('#actionBar');
-  bar.innerHTML = '';
-  const attack = document.createElement('button');
-  attack.textContent = 'Attack';
-  attack.onclick = ()=>{
-    const attacked = attemptPlayerAttack();
-    if (!attacked) log('No enemy in range.');
-    advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
-  };
-  const interact = document.createElement('button');
-  interact.textContent = 'Interact';
-  interact.onclick = ()=>openPuzzle();
-  bar.append(attack, interact);
+  if (bar) bar.innerHTML = '';
 }
 
 function clearActionBar(){

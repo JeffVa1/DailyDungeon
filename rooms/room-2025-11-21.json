@@ -1,0 +1,129 @@
+{
+  "2025-11-30": {
+    "date": "2025-11-30",
+    "type": "combat",
+    "name": "Untitled",
+    "introText": "",
+    "successText": "",
+    "failureText": "",
+    "gridWidth": 26,
+    "gridHeight": 15,
+    "tiles": [
+      "##########################",
+      "#.........#..........#...#",
+      "#.........#....##....#.#.#",
+      "#####O###T#..##..##..SO..#",
+      "#EE#..#...#.#.#..#.#.###.#",
+      "#..#..#T###..........###.#",
+      "#L##..#...#..........###.#",
+      "#..#..###T#.#.#..#.#.###.#",
+      "#..#...#..#..##..##..###.#",
+      "#..##.##.##....##....###.#",
+      "#..#...#.###.........###.#",
+      "#..#.K.#.............###.#",
+      "#..#####################.#",
+      "#........................#",
+      "##########################"
+    ],
+    "entities": [
+      {
+        "kind": "playerSpawn",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "kind": "enemy",
+        "enemyType": "Goblin Cutthroat",
+        "x": 15,
+        "y": 3
+      },
+      {
+        "kind": "enemy",
+        "enemyType": "Goblin Cutthroat",
+        "x": 16,
+        "y": 3
+      },
+      {
+        "kind": "puzzle",
+        "x": 21,
+        "y": 3
+      },
+      {
+        "kind": "exit",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "kind": "exit",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "kind": "enemy",
+        "enemyType": "Goblin Cutthroat",
+        "x": 13,
+        "y": 4
+      },
+      {
+        "kind": "enemy",
+        "enemyType": "Goblin Cutthroat",
+        "x": 18,
+        "y": 4
+      }
+    ],
+    "puzzleConfigs": [
+      {
+        "x": 21,
+        "y": 3,
+        "question": "What's 9 + 10?",
+        "options": [
+          "19",
+          "20",
+          "21"
+        ],
+        "answer": 2
+      }
+    ],
+    "trapConfigs": [
+      {
+        "x": 9,
+        "y": 3,
+        "intro": "Oh no a trap!",
+        "dc": 10,
+        "damage": 5
+      },
+      {
+        "x": 7,
+        "y": 5,
+        "intro": "Oh no another trap!",
+        "dc": 13,
+        "damage": 5
+      },
+      {
+        "x": 9,
+        "y": 7,
+        "intro": "Seriously? A third trap!?",
+        "dc": 16,
+        "damage": 5
+      }
+    ],
+    "puzzleConfig": {
+      "x": 21,
+      "y": 3,
+      "question": "What's 9 + 10?",
+      "options": [
+        "19",
+        "20",
+        "21"
+      ],
+      "answer": 2
+    },
+    "trapConfig": {
+      "x": 9,
+      "y": 3,
+      "intro": "Oh no a trap!",
+      "dc": 10,
+      "damage": 5
+    }
+  }
+}

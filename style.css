@@ -49,8 +49,6 @@ textarea { min-height: 70px; }
 }
 .grid.grid-labeled { grid-auto-flow: row; }
 .cell {
-  width: clamp(28px, 3vw, 38px);
-  height: clamp(28px, 3vw, 38px);
   display: flex;
   align-items: center;
   justify-content: center;

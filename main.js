@@ -123,6 +123,14 @@ let state = {
   dungeonView: 'dungeon',
 };
 
+function getCellSizing() {
+  const styles = getComputedStyle(document.documentElement);
+  const cellSize = styles.getPropertyValue('--cell-size').trim() || '28px';
+  const labelSize = styles.getPropertyValue('--label-size').trim() || '32px';
+  const labelHeight = styles.getPropertyValue('--label-height').trim() || '24px';
+  return { cellSize, labelSize, labelHeight };
+}
+
 async function fetchJsonWithFallback(path) {
   const url = path;
   try {
@@ -833,9 +841,10 @@ function renderGrid() {
   const wrap = qs('#roomGrid');
   if (!wrap) return;
   const room = state.currentRoom;
+  const { cellSize, labelSize, labelHeight } = getCellSizing();
   wrap.classList.add('grid-labeled');
-  wrap.style.gridTemplateColumns = `32px repeat(${room.gridWidth}, 28px)`;
-  wrap.style.gridTemplateRows = `24px repeat(${room.gridHeight}, 28px)`;
+  wrap.style.gridTemplateColumns = `${labelSize} repeat(${room.gridWidth}, ${cellSize})`;
+  wrap.style.gridTemplateRows = `${labelHeight} repeat(${room.gridHeight}, ${cellSize})`;
   wrap.innerHTML = '';
   for (let y = -1; y < room.gridHeight; y++) {
     for (let x = -1; x < room.gridWidth; x++) {
@@ -1935,9 +1944,10 @@ function buildEditorGrid(prefill){
   const h = grid.length; const w = grid[0]?.length || 10;
   if (widthInput) widthInput.value = w;
   if (heightInput) heightInput.value = h;
+  const { cellSize, labelSize, labelHeight } = getCellSizing();
   g.classList.add('grid-labeled');
-  g.style.gridTemplateColumns = `32px repeat(${w}, 28px)`;
-  g.style.gridTemplateRows = `24px repeat(${h}, 28px)`;
+  g.style.gridTemplateColumns = `${labelSize} repeat(${w}, ${cellSize})`;
+  g.style.gridTemplateRows = `${labelHeight} repeat(${h}, ${cellSize})`;
   g.innerHTML = '';
   for(let y=-1;y<h;y++) for(let x=-1;x<w;x++){
     const cell=document.createElement('div');

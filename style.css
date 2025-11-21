@@ -63,22 +63,22 @@ textarea { min-height: 70px; }
 .label-cell.column-label { border-bottom: 1px solid #1f2a45; }
 .label-cell.row-label { border-right: 1px solid #1f2a45; }
 .label-cell.corner { background: transparent; }
-.tile-floor { background: #121a35; }
-.tile-wall { background: #44475a; }
-.tile-pushable { background: #3a2e2e; }
-.tile-plate-red { background: rgba(190, 80, 80, 0.4); border: 1px solid #c45b5b; }
-.tile-plate-blue { background: rgba(80, 120, 190, 0.4); border: 1px solid #5b78c4; }
-.tile-plate-green { background: rgba(80, 170, 120, 0.4); border: 1px solid #59ac7c; }
-.tile-door-red { background: linear-gradient(135deg, #5a2e2e, #3a1c1c); }
-.tile-door-blue { background: linear-gradient(135deg, #2e3a5a, #1c243a); }
-.tile-door-green { background: linear-gradient(135deg, #2e5a3a, #1b3a24); }
-.tile-door-red-open, .tile-door-blue-open, .tile-door-green-open { background: #1c1f35; }
-.tile-key { background: radial-gradient(circle at 30% 30%, #ffd95e, #d4a018); color: #1a1200; }
-.tile-chest { background: radial-gradient(circle at 40% 40%, #f4b400, #b98000); color: #1a1200; border: 1px solid #f8d165; }
-.tile-locked { background: linear-gradient(135deg, #3a3f56, #252a3f); }
-.tile-exit { background: #2e5a3a; }
-.tile-trap { background: #5a2e2e; }
-.tile-puzzle { background: #2e3a5a; }
+.tile-floor { background: #121a35; border: 1px solid #1c2745; }
+.tile-wall { background: #3a3f56; border: 1px solid #2b3046; }
+.tile-pushable { background: #332727; border: 1px solid #2a1f1f; }
+.tile-plate-red { background: rgba(190, 80, 80, 0.35); border: 1px solid #c45b5b; }
+.tile-plate-blue { background: rgba(80, 120, 190, 0.35); border: 1px solid #5b78c4; }
+.tile-plate-green { background: rgba(80, 170, 120, 0.35); border: 1px solid #59ac7c; }
+.tile-door-red { background: #552c2c; border: 1px solid #6d3a3a; }
+.tile-door-blue { background: #2c3552; border: 1px solid #3c476b; }
+.tile-door-green { background: #2c4a38; border: 1px solid #3d6a4e; }
+.tile-door-red-open, .tile-door-blue-open, .tile-door-green-open { background: #191e32; border: 1px solid #252c46; }
+.tile-key { background: #d4a018; color: #0f0b03; border: 1px solid #f2c14b; }
+.tile-chest { background: #b98000; color: #120d02; border: 1px solid #f8d165; }
+.tile-locked { background: #2f3550; border: 1px solid #404766; }
+.tile-exit { background: #28503a; border: 1px solid #3b7253; }
+.tile-trap { background: #512828; border: 1px solid #723a3a; }
+.tile-puzzle { background: #2c3954; border: 1px solid #3f4f71; }
 .entity-player { background: #3f7fbf; }
 .entity-enemy { background: #bf4b3f; }
 .entity-boss { background: #bf3fb2; }

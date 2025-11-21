@@ -55,7 +55,6 @@ textarea { min-height: 70px; }
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  border-radius: 6px;
 }
 .label-cell { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
 .label-cell.column-label { border-bottom: 1px solid #1f2a45; }

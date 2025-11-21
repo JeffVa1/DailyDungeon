@@ -32,13 +32,19 @@ textarea { min-height: 70px; }
 .label-cell.corner { background: transparent; }
 .tile-floor { background: #1c1f35; }
 .tile-wall { background: #44475a; }
-.tile-obstacle { background: #3a2e2e; }
+.tile-pushable { background: #3a2e2e; }
+.tile-plate-red { background: rgba(190, 80, 80, 0.4); border: 1px solid #c45b5b; }
+.tile-plate-blue { background: rgba(80, 120, 190, 0.4); border: 1px solid #5b78c4; }
+.tile-plate-green { background: rgba(80, 170, 120, 0.4); border: 1px solid #59ac7c; }
+.tile-door-red { background: linear-gradient(135deg, #5a2e2e, #3a1c1c); }
+.tile-door-blue { background: linear-gradient(135deg, #2e3a5a, #1c243a); }
+.tile-door-green { background: linear-gradient(135deg, #2e5a3a, #1b3a24); }
+.tile-door-red-open, .tile-door-blue-open, .tile-door-green-open { background: #1c1f35; }
 .tile-key { background: radial-gradient(circle at 30% 30%, #ffd95e, #d4a018); color: #1a1200; }
 .tile-locked { background: linear-gradient(135deg, #3a3f56, #252a3f); }
 .tile-exit { background: #2e5a3a; }
 .tile-trap { background: #5a2e2e; }
 .tile-puzzle { background: #2e3a5a; }
-.tile-decoration { background: #293143; }
 .entity-player { background: #3f7fbf; }
 .entity-enemy { background: #bf4b3f; }
 .entity-boss { background: #bf3fb2; }

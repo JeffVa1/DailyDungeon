@@ -786,6 +786,7 @@ function renderGrid() {
         else if (isPlateTile(displayTile)) cell.classList.add(`tile-plate-${plateColor(displayTile)}`);
         else if (displayTile === 'O') cell.classList.add('tile-pushable');
         else if (displayTile === 'K') cell.classList.add('tile-key');
+        else if (displayTile === 'C') cell.classList.add('tile-chest');
         else if (displayTile === 'L') cell.classList.add('tile-locked');
         else if (isDoorTile(displayTile) || isDoorTile(baseTile)) {
           const doorBase = isDoorTile(displayTile) ? displayTile : baseTile;
@@ -832,6 +833,7 @@ function tileGlyph(baseTile, overlayTile) {
       return color === 'red' ? '🟥' : color === 'blue' ? '🟦' : '🟩';
     }
     if (overlayTile === 'K') return '🔑';
+    if (overlayTile === 'C') return '💰';
     if (overlayTile === 'L') return '🔒';
     if (overlayTile === 'E') return '🚪';
     if (overlayTile === 'T') return '⚠️';
@@ -848,6 +850,7 @@ function tileGlyph(baseTile, overlayTile) {
   if (isPlateTile(baseTile)) return '';
   if (baseTile === '#') return '';
   if (baseTile === 'K') return '🔑';
+  if (baseTile === 'C') return '💰';
   if (baseTile === 'L') return '🔒';
   if (baseTile === 'E') return '🚪';
   if (baseTile === 'T') return '⚠️';
@@ -1134,6 +1137,7 @@ function handleMove(dir) {
     setOverlayTile(nx, ny, '.');
     log('You pick up a key.');
   }
+  if (tile === 'C') openChest(nx, ny);
   if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
@@ -1324,6 +1328,45 @@ function triggerTrap(x,y){
     if (state.player.stats.hpCurrent>0){ advanceEnemiesAfterPlayerAction(); }
   }
   render();
+}
+
+function openChest(x, y) {
+  const pools = [
+    { type: 'item', pool: (LOOT.items || []).filter(Boolean) },
+    { type: 'weapon', pool: (LOOT.weapons || []).filter(Boolean) },
+  ].filter((p) => p.pool.length);
+
+  if (!pools.length) {
+    log('The chest is empty.');
+    setBaseTile(x, y, '.');
+    setOverlayTile(x, y, '.');
+    renderGrid();
+    return;
+  }
+
+  if (state.keys <= 0) {
+    log('The chest is locked. You need a key.');
+    return;
+  }
+
+  state.keys -= 1;
+  const selection = randomFrom(pools);
+  const reward = randomFrom(selection.pool);
+
+  if (selection.type === 'item') {
+    state.player.items.push(reward);
+    log(`You unlock the chest and find ${reward.name} (item).`);
+  } else {
+    state.player.weapon = reward;
+    log(`You unlock the chest and find ${reward.name} (weapon).`);
+  }
+
+  setBaseTile(x, y, '.');
+  setOverlayTile(x, y, '.');
+  renderGrid();
+  renderCharacterPanel();
+  renderStatus();
+  savePlayer();
 }
 
 function buildDeathRecord(lossDate) {
@@ -1681,6 +1724,7 @@ function buildPalette(){
     { key: '#', label:'Wall' },
     { key: 'O', label:'Pushable' },
     { key: 'K', label:'Key' },
+    { key: 'C', label:'Chest' },
     { key: 'L', label:'Locked Door' },
     { key: 'R', label:'Red Door' },
     { key: 'B', label:'Blue Door' },
@@ -1768,6 +1812,7 @@ function updateEditorCell(cell, key){
     'E': '🚪',
     'T': '⚠️',
     'S': '✨',
+    'C': '💰',
     'X': '👑',
     'N': '⚔️',
     'P': '',
@@ -1781,6 +1826,7 @@ function updateEditorCell(cell, key){
   else if (key==='T') cell.classList.add('tile-trap');
   else if (key==='S') cell.classList.add('tile-puzzle');
   else if (key==='K') cell.classList.add('tile-key');
+  else if (key==='C') cell.classList.add('tile-chest');
   else if (key==='L') cell.classList.add('tile-locked');
   else if (['R','B','G'].includes(key)) cell.classList.add(`tile-door-${doorColor(key)}`);
   else if (['r','b','g'].includes(key)) cell.classList.add(`tile-plate-${plateColor(key)}`);
@@ -1868,7 +1914,7 @@ async function loadEditorRoom(date){
       if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='N';
       if (ent.kind==='boss') tileGrid[ent.y][ent.x]='X';
     });
-    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','P','N','X','K','L','R','B','G','r','b','g'].includes(c)?c:'.')));
+    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','P','N','X','K','L','R','B','G','r','b','g','C'].includes(c)?c:'.')));
     const puzzleList = qs('#puzzleList');
     const trapList = qs('#trapList');
     puzzleList.innerHTML='';

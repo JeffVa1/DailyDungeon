@@ -41,6 +41,7 @@ textarea { min-height: 70px; }
 .tile-door-green { background: linear-gradient(135deg, #2e5a3a, #1b3a24); }
 .tile-door-red-open, .tile-door-blue-open, .tile-door-green-open { background: #1c1f35; }
 .tile-key { background: radial-gradient(circle at 30% 30%, #ffd95e, #d4a018); color: #1a1200; }
+.tile-chest { background: radial-gradient(circle at 40% 40%, #f4b400, #b98000); color: #1a1200; border: 1px solid #f8d165; }
 .tile-locked { background: linear-gradient(135deg, #3a3f56, #252a3f); }
 .tile-exit { background: #2e5a3a; }
 .tile-trap { background: #5a2e2e; }

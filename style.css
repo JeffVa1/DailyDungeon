@@ -46,7 +46,6 @@ textarea { min-height: 70px; }
   border: 1px solid #1f2a45;
   margin-top: 8px;
   max-width: 100%;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), var(--glow);
 }
 .grid.grid-labeled { grid-auto-flow: row; }
 .cell {
@@ -57,7 +56,6 @@ textarea { min-height: 70px; }
   justify-content: center;
   font-size: 13px;
   border-radius: 6px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .label-cell { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
 .label-cell.column-label { border-bottom: 1px solid #1f2a45; }

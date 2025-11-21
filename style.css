@@ -11,6 +11,10 @@
   --success: #5dd39e;
   --glow: 0 12px 38px rgba(6, 13, 31, 0.55);
   --radius: 12px;
+  --grid-gap: 2px;
+  --cell-size: 28px;
+  --label-size: 32px;
+  --label-height: 24px;
 }
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; color: #f3f6ff; background: radial-gradient(circle at 10% 20%, #0b1530, #050914 45%); }
 #app { display: flex; flex-direction: column; width: 100vw; height: 100vh; backdrop-filter: blur(4px); }
@@ -39,7 +43,7 @@ textarea { min-height: 70px; }
 .hidden { display: none !important; }
 .grid {
   display: grid;
-  gap: 2px;
+  gap: var(--grid-gap);
   background: #0a0f20;
   padding: 12px;
   border-radius: 14px;
@@ -52,12 +56,17 @@ textarea { min-height: 70px; }
   display: flex;
   align-items: center;
   justify-content: center;
+  width: var(--cell-size);
+  height: var(--cell-size);
   font-size: 13px;
+  line-height: 1;
 }
-.label-cell { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
+.label-cell { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); width: var(--cell-size); height: var(--cell-size); }
+.label-cell.column-label { height: var(--label-height); }
+.label-cell.row-label { width: var(--label-size); }
+.label-cell.corner { background: transparent; width: var(--label-size); height: var(--label-height); }
 .label-cell.column-label { border-bottom: 1px solid #1f2a45; }
 .label-cell.row-label { border-right: 1px solid #1f2a45; }
-.label-cell.corner { background: transparent; }
 .tile-floor { background: #121a35; border: 1px solid #1c2745; }
 .tile-wall { background: #3a3f56; border: 1px solid #2b3046; }
 .tile-pushable { background: #332727; border: 1px solid #2a1f1f; }

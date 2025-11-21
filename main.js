@@ -824,6 +824,7 @@ function entityGlyph(ent) {
 function tileGlyph(baseTile, overlayTile) {
   if (overlayTile === 'O') return '⬜';
   if (overlayTile !== '.') {
+    if (overlayTile === '#') return '';
     if (isPlateTile(overlayTile)) return '';
     if (overlayTile === 'P') return '';
     if (isDoorTile(overlayTile)) {

@@ -116,6 +116,8 @@ let state = {
   owner: ownerMode,
   combatLog: [],
   effects: { tempAttack: 0, autoPuzzle: false, escape: false },
+  lastDeath: null,
+  lockedOutDate: null,
 };
 
 async function fetchJsonWithFallback(path) {
@@ -268,8 +270,40 @@ function loadPlayer() {
   }
 }
 
+function loadDeathRecord() {
+  const data = localStorage.getItem('dd_death_record');
+  return data ? JSON.parse(data) : null;
+}
+
+function loadLockoutDate() {
+  return localStorage.getItem('dd_lockout_date');
+}
+
+function saveLockoutDate(date) {
+  if (!date) return;
+  localStorage.setItem('dd_lockout_date', date);
+  state.lockedOutDate = date;
+}
+
+function clearLockoutDate() {
+  localStorage.removeItem('dd_lockout_date');
+  state.lockedOutDate = null;
+}
+
+function saveDeathRecord(record) {
+  if (!record) return;
+  localStorage.setItem('dd_death_record', JSON.stringify(record));
+}
+
+function clearDeathRecord() {
+  localStorage.removeItem('dd_death_record');
+  state.lastDeath = null;
+}
+
 function migratePlayerStats() {
   if (!state.player) return;
+  state.player.createdAt = state.player.createdAt || todayStr;
+  state.player.streakStartDate = state.player.streakStartDate || state.player.createdAt;
   const stats = state.player.stats || {};
   if (stats.strength == null || stats.dexterity == null || stats.wisdom == null || stats.vitality == null) {
     const base = CLASSES[state.player.class] || { strength: 5, dexterity: 5, wisdom: 5, vitality: 6 };
@@ -353,6 +387,11 @@ async function init() {
   }
   refreshDateUI();
   attachTabEvents();
+  state.lastDeath = loadDeathRecord();
+  state.lockedOutDate = loadLockoutDate();
+  if (state.lockedOutDate && state.lockedOutDate !== todayStr) {
+    clearLockoutDate();
+  }
   loadPlayer();
   if (!state.player) {
     renderCharacterCreation();
@@ -394,7 +433,7 @@ function switchTab(tab) {
   qsa('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   qsa('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === tab));
   if (tab === 'dungeon') renderDungeonPanel();
-  if (tab === 'character') renderCharacterPanel();
+  if (tab === 'character') state.player ? renderCharacterPanel() : renderCharacterCreation();
   if (tab === 'map') renderMapPanel();
   if (tab === 'settings') renderSettingsPanel();
   if (tab === 'editor') renderEditorPanel();
@@ -409,9 +448,68 @@ function refreshAllPanels() {
   if (ownerMode) renderEditorPanel();
 }
 
+function renderLossSummary(record, opts = {}) {
+  if (!record) return '';
+  const stats = record.stats || {};
+  const hpMax = stats.hpMax || Math.max((stats.vitality || 0) * 3, 1);
+  const hpCurrent = stats.hpCurrent ?? hpMax;
+  return `
+    <div class="section-card loss-card">
+      <div class="loss-header">
+        <div>
+          <p class="small">${record.lossDate}</p>
+          <h2>${record.name} has fallen</h2>
+          <p class="small">${record.class} • Level ${record.level}</p>
+        </div>
+        <span class="pill">Defeated</span>
+      </div>
+      <p>Win streak from <strong>${record.streakStartDate}</strong> to <strong>${record.lossDate}</strong>.</p>
+      <div class="pill-row">
+        <span class="pill subtle">Wins: ${record.wins || 0}</span>
+        <span class="pill subtle">Start: ${record.streakStartDate}</span>
+        <span class="pill subtle">Loss: ${record.lossDate}</span>
+      </div>
+      <div class="summary-grid loss-grid">
+        <div class="info-block">
+          <strong>Vitals</strong>
+          <div class="bar-row">
+            <div class="health-bar"><div class="health-fill" style="width:${(hpCurrent/(hpMax||1))*100}%"></div></div>
+            <span class="small">${hpCurrent}/${hpMax} HP</span>
+          </div>
+          <div class="stat-row"><span>Strength</span><span>${stats.strength ?? '-'}</span></div>
+          <div class="stat-row"><span>Dexterity</span><span>${stats.dexterity ?? '-'}</span></div>
+          <div class="stat-row"><span>Wisdom</span><span>${stats.wisdom ?? '-'}</span></div>
+          <div class="stat-row"><span>Vitality</span><span>${stats.vitality ?? '-'}</span></div>
+          <div class="stat-divider" aria-hidden="true"></div>
+          <div class="stat-row"><span>Attack</span><span>${stats.attack ?? '-'}</span></div>
+          <div class="stat-row"><span>Defense</span><span>${stats.defense ?? '-'}</span></div>
+          <div class="stat-row"><span>Crit</span><span>${stats.critChance ?? '-'}%</span></div>
+        </div>
+        <div class="info-block">
+          <strong>Weapon</strong>
+          <div class="card-row">
+            <div>
+              <div class="item-name">${record.weapon?.name || 'None'}</div>
+              <div class="small">${describeLoot(record.weapon || {})}</div>
+            </div>
+          </div>
+        </div>
+        <div class="info-block">
+          <strong>Passives</strong>
+          <div class="pill-row">${(record.passives && record.passives.length
+            ? record.passives.map((pa)=>`<span class="pill subtle">${pa.name}</span>`).join('')
+            : '<span class="small">None</span>')}</div>
+        </div>
+      </div>
+      ${opts.footer || ''}
+    </div>`;
+}
+
 function renderCharacterCreation() {
   const panel = qs('#character');
+  const memorial = state.lastDeath ? renderLossSummary(state.lastDeath, { footer: '<p class="small">Your next adventure awaits. Create a new character to continue.</p>' }) : '';
   panel.innerHTML = `
+    ${memorial}
     <div class="section-card">
       <h2>Create Your Character</h2>
       <div class="button-row">
@@ -433,6 +531,8 @@ function renderCharacterCreation() {
       class: cls,
       level: 1,
       xp: 0,
+      createdAt: todayStr,
+      streakStartDate: todayStr,
       stats: {
         strength: base.strength,
         dexterity: base.dexterity,
@@ -446,6 +546,7 @@ function renderCharacterCreation() {
       completedRooms: [],
       failedRooms: [],
     };
+    clearDeathRecord();
     savePlayer();
     refreshAllPanels();
     switchTab('dungeon');
@@ -484,7 +585,31 @@ function buildGrid(room) {
 async function renderDungeonPanel() {
   const panel = qs('#dungeon');
   if (!state.player) {
-    panel.innerHTML = `<div class="section-card">Create a character to enter the dungeon.</div>`;
+    const summary = state.lastDeath
+      ? renderLossSummary(state.lastDeath, { footer: '<p class="small">Create a new character to continue.</p>' })
+      : '';
+    panel.innerHTML = summary || `<div class="section-card">Create a character to enter the dungeon.</div>`;
+    return;
+  }
+  if (state.lockedOutDate && state.lockedOutDate !== todayStr) {
+    clearLockoutDate();
+  }
+  if (!state.owner && state.lockedOutDate === todayStr) {
+    panel.innerHTML = `
+      <div class="section-card">
+        <div class="outcome-card failed">
+          <div class="outcome-header">
+            <div>
+              <p class="small">${todayStr}</p>
+              <h2>Today's dungeon is locked</h2>
+            </div>
+            <span class="pill">Return Tomorrow</span>
+          </div>
+          <p>You fell in today's dungeon. Rest and return tomorrow to start fresh.</p>
+          ${state.lastDeath ? renderLossSummary(state.lastDeath) : ''}
+        </div>
+      </div>`;
+    clearActionBar();
     return;
   }
   const ownerActions = state.owner
@@ -1030,6 +1155,44 @@ function triggerTrap(x,y){
   render();
 }
 
+function buildDeathRecord(lossDate) {
+  if (!state.player) return null;
+  const derived = getDerivedStats();
+  return {
+    name: state.player.name,
+    class: state.player.class,
+    level: state.player.level,
+    stats: {
+      ...state.player.stats,
+      hpMax: derived.hpMax,
+      attack: derived.attack,
+      defense: derived.defense,
+      critChance: derived.critChance,
+    },
+    weapon: { ...(state.player.weapon || {}) },
+    passives: [...(state.player.passives || [])],
+    items: [...(state.player.items || [])],
+    wins: state.player.completedRooms?.length || 0,
+    streakStartDate: state.player.streakStartDate || state.player.createdAt || todayStr,
+    lossDate: lossDate || todayStr,
+  };
+}
+
+function finalizePlayerDeath(record) {
+  state.lastDeath = record || state.lastDeath;
+  if (record) saveDeathRecord(record);
+  saveLockoutDate(record?.lossDate || todayStr);
+  localStorage.removeItem('dd_player');
+  state.player = null;
+  state.currentRoom = null;
+  state.grid = [];
+  state.entities = [];
+  clearActionBar();
+  renderDungeonPanel();
+  renderCharacterCreation();
+  switchTab('character');
+}
+
 function onSuccess() {
   log(state.currentRoom.successText);
   const date = state.currentRoom?.date || todayStr;
@@ -1045,12 +1208,14 @@ function onSuccess() {
 function onFailure() {
   log(state.currentRoom.failureText);
   const date = state.currentRoom?.date || todayStr;
-  if (!state.player.failedRooms.includes(date)) state.player.failedRooms.push(date);
-  savePlayer();
+  if (state.player && !state.player.failedRooms.includes(date)) state.player.failedRooms.push(date);
+  const record = buildDeathRecord(date);
   const content = qs('#dungeonContent');
-  if (content && state.currentRoom) renderOutcome(content, 'failed', state.currentRoom, date);
+  if (content) {
+    content.innerHTML = renderLossSummary(record || state.lastDeath, { footer: '<p class="small">Return tomorrow with a new hero.</p>' });
+  }
+  finalizePlayerDeath(record);
   alert('You have been defeated. Try again tomorrow.');
-  clearActionBar();
 }
 
 function offerLoot() {
@@ -1155,7 +1320,10 @@ function log(msg){
 }
 
 function renderCharacterPanel(){
-  if (!state.player) return;
+  if (!state.player) {
+    renderCharacterCreation();
+    return;
+  }
   const p = state.player;
   const derived = getDerivedStats();
   const panel = qs('#character');
@@ -1216,6 +1384,7 @@ function renderCharacterPanel(){
 
 function renderMapPanel(){
   const panel = qs('#map');
+  if (!state.player) { panel.innerHTML = `<div class="section-card">Create a character to view progress.</div>`; return; }
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(),1);
   const startDay = monthStart.getDay();

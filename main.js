@@ -70,11 +70,11 @@ const DEFAULT_ENEMIES = {
 
 const DEFAULT_LOOT = {
   weapons: [
-    { name: 'Rusty Dagger', attack: 1 },
-    { name: 'Iron Longsword', attack: 3 },
-    { name: 'Ember Wand', magic: 2 },
-    { name: 'Shadow Bow', attack: 2, crit: 3 },
-    { name: 'Ogre Smasher', attack: 5, defense: -1 },
+    { name: 'Rusty Dagger', attack: 1, scrapXp: 5 },
+    { name: 'Iron Longsword', attack: 3, scrapXp: 8 },
+    { name: 'Ember Wand', magic: 2, scrapXp: 9 },
+    { name: 'Shadow Bow', attack: 2, crit: 3, scrapXp: 10 },
+    { name: 'Ogre Smasher', attack: 5, defense: -1, scrapXp: 12 },
   ],
   passives: [
     { name: 'Stone Skin', defense: 2 },
@@ -307,6 +307,13 @@ function migratePlayerStats() {
   if (!state.player) return;
   state.player.createdAt = state.player.createdAt || todayStr;
   state.player.streakStartDate = state.player.streakStartDate || state.player.createdAt;
+  state.player.weapons = state.player.weapons || [];
+  if (!state.player.weapon && state.player.weapons.length) {
+    state.player.weapon = state.player.weapons[0];
+  }
+  if (state.player.weapon && !state.player.weapons.length) {
+    state.player.weapons.push(state.player.weapon);
+  }
   const stats = state.player.stats || {};
   if (stats.strength == null || stats.dexterity == null || stats.wisdom == null || stats.vitality == null) {
     const base = CLASSES[state.player.class] || { strength: 5, dexterity: 5, wisdom: 5, vitality: 6 };
@@ -529,6 +536,7 @@ function renderCharacterCreation() {
     const name = qs('#charName').value || 'Hero';
     const cls = qs('#charClass').value;
     const base = CLASSES[cls];
+    const startingWeapon = { name: 'Training Blade', attack: 1, scrapXp: 4 };
     state.player = {
       name,
       class: cls,
@@ -543,7 +551,8 @@ function renderCharacterCreation() {
         vitality: base.vitality,
         hpCurrent: base.vitality * 3,
       },
-      weapon: { name: 'Training Blade', attack: 1 },
+      weapon: startingWeapon,
+      weapons: [startingWeapon],
       passives: [],
       items: [],
       completedRooms: [],
@@ -1458,7 +1467,7 @@ function openChest(x, y) {
     state.player.items.push(reward);
     log(`You unlock the chest and find ${reward.name} (item).`);
   } else {
-    state.player.weapon = reward;
+    addWeaponToInventory(reward, { equip: true });
     log(`You unlock the chest and find ${reward.name} (weapon).`);
   }
 
@@ -1559,7 +1568,7 @@ function offerLoot() {
   content.querySelectorAll('.loot-card').forEach((c)=>c.onclick=()=>select(parseInt(c.dataset.i)));
   function select(i){
     const choice = options[i];
-    if (choice.kind === 'weapon') state.player.weapon = choice.data;
+    if (choice.kind === 'weapon') addWeaponToInventory(choice.data, { equip: true });
     if (choice.kind === 'passive') state.player.passives.push(choice.data);
     if (choice.kind === 'item') state.player.items.push(choice.data);
     modal.classList.add('hidden');
@@ -1579,6 +1588,39 @@ function describeLoot(l){
   if (l.escape) parts.push('Escape combat');
   if (l.autoPuzzle) parts.push('Auto-solve next puzzle');
   return parts.join(', ');
+}
+
+function addWeaponToInventory(weapon, { equip = true } = {}) {
+  if (!state.player || !weapon) return;
+  const copy = { ...weapon };
+  if (!Array.isArray(state.player.weapons)) state.player.weapons = [];
+  state.player.weapons.push(copy);
+  if (equip) state.player.weapon = copy;
+}
+
+function equipWeapon(index) {
+  const weapon = state.player?.weapons?.[index];
+  if (!weapon) return;
+  state.player.weapon = weapon;
+  savePlayer();
+  renderCharacterPanel();
+  renderStatus();
+}
+
+function scrapWeapon(index) {
+  const weapon = state.player?.weapons?.[index];
+  if (!weapon) return;
+  const equippedIndex = state.player.weapons.indexOf(state.player.weapon);
+  if (index === equippedIndex || weapon === state.player.weapon) {
+    alert('Unequip this weapon before scrapping it.');
+    return;
+  }
+  const scrapValue = weapon.scrapXp ?? 3;
+  state.player.weapons.splice(index, 1);
+  grantXP(scrapValue);
+  renderCharacterPanel();
+  renderStatus();
+  savePlayer();
 }
 
 function useItem(index){
@@ -1702,13 +1744,24 @@ function renderCharacterPanel(){
           <div class="stat-row"><span>Crit</span><span>${derived.critChance}%</span></div>
         </div>
         <div class="info-block">
-          <strong>Weapon</strong>
-          <div class="card-row">
-            <div>
-              <div class="item-name">${p.weapon?.name || 'None'}</div>
-              <div class="small">${describeLoot(p.weapon||{})}</div>
-            </div>
+          <strong>Weapons</strong>
+          <div class="inventory-grid weapon-grid">
+            ${(p.weapons?.length ? p.weapons.map((w,idx)=>`<div class="inventory-card weapon-card ${p.weapon===w ? 'equipped' : ''}" data-index="${idx}">
+              <div class="weapon-top">
+                <div>
+                  <div class="item-header">${w.name}</div>
+                  <div class="small">${describeLoot(w)}</div>
+                </div>
+                ${p.weapon===w ? '<span class="pill subtle">Equipped</span>' : ''}
+              </div>
+              <div class="weapon-actions">
+                <button class="scrap-btn" data-index="${idx}" ${p.weapon===w ? 'disabled' : ''}>Scrap
+                  <span class="tooltip">+${w.scrapXp ?? 3} XP</span>
+                </button>
+              </div>
+            </div>`).join(''):'<span class="small">No weapons collected</span>')}
           </div>
+          <p class="small muted">Click a weapon to equip it. Scrapping yields bonus XP.</p>
         </div>
         <div class="info-block">
           <strong>Passives</strong>
@@ -1726,6 +1779,12 @@ function renderCharacterPanel(){
         </div>
       </div>
     </div>`;
+  panel.querySelectorAll('.weapon-card').forEach((card)=>card.addEventListener('click',(e)=>{
+    const idx = parseInt(card.dataset.index,10);
+    if (e.target.closest('.scrap-btn')) return;
+    equipWeapon(idx);
+  }));
+  panel.querySelectorAll('.scrap-btn').forEach((btn)=>btn.onclick=(e)=>{ e.stopPropagation(); scrapWeapon(parseInt(btn.dataset.index,10)); });
   panel.querySelectorAll('.use-btn').forEach((b)=>b.onclick=()=>useItem(parseInt(b.dataset.index)));
 }
 

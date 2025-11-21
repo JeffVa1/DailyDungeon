@@ -98,6 +98,8 @@ textarea { min-height: 70px; }
 .dungeon-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
 .dungeon-body { display: grid; gap: 12px; justify-items: center; }
 .dungeon-grid, .dungeon-inventory { width: 100%; display: flex; justify-content: center; }
+.dungeon-grid .grid { box-shadow: none; background: #0b1020; border: 1px solid #141c2e; }
+.dungeon-grid .cell { box-shadow: none; }
 .dungeon-inventory { background: #0c1328; border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; box-shadow: var(--glow); }
 .dungeon-actions { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; padding: 10px 0; border-top: 1px solid #1f2a45; }
 .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -151,6 +153,14 @@ legend { padding: 0 6px; }
 .inventory-card .item-header { font-weight: 700; letter-spacing: 0.2px; }
 .use-btn { background: linear-gradient(135deg, #3956c8, #6fa8ff); border: 1px solid #4a7db6; color: #fff; padding: 9px; border-radius: 10px; cursor: pointer; box-shadow: var(--glow); }
 .use-btn:hover { background: linear-gradient(135deg, #4368e0, #79b2ff); }
+.weapon-card { cursor: pointer; border-color: #2d3a64; transition: border-color 0.2s, transform 0.15s; }
+.weapon-card:hover { border-color: #4f6bd1; transform: translateY(-1px); }
+.weapon-card.equipped { border-color: #6fa8ff; box-shadow: 0 0 0 1px rgba(111,168,255,0.4); }
+.weapon-actions { display: flex; justify-content: flex-end; }
+.scrap-btn { position: relative; padding: 8px 12px; background: #2a1d2d; color: #f2d7ff; border: 1px solid #52345a; border-radius: 10px; cursor: pointer; }
+.scrap-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+.scrap-btn .tooltip { position: absolute; inset-inline-start: 0; inset-block-start: -10px; transform: translateY(-100%); background: #121829; color: #eaefff; padding: 6px 8px; border-radius: 8px; border: 1px solid #27365d; font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease; }
+.scrap-btn:hover .tooltip { opacity: 1; transform: translateY(-110%); }
 .outcome-card { border: 1px solid #2c2f4b; border-radius: 12px; padding: 14px; background: linear-gradient(135deg, #14162a, #101224); box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
 .outcome-card.complete { border-color: #2e5a3a; }
 .outcome-card.failed { border-color: #5a2e2e; }

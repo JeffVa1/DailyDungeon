@@ -1,10 +1,10 @@
 {
   "weapons": [
-    { "name": "Rusty Dagger", "attack": 1 },
-    { "name": "Iron Longsword", "attack": 3 },
-    { "name": "Ember Wand", "magic": 2 },
-    { "name": "Shadow Bow", "attack": 2, "crit": 3 },
-    { "name": "Ogre Smasher", "attack": 5, "defense": -1 }
+    { "name": "Rusty Dagger", "attack": 1, "scrapXp": 5 },
+    { "name": "Iron Longsword", "attack": 3, "scrapXp": 8 },
+    { "name": "Ember Wand", "magic": 2, "scrapXp": 9 },
+    { "name": "Shadow Bow", "attack": 2, "crit": 3, "scrapXp": 10 },
+    { "name": "Ogre Smasher", "attack": 5, "defense": -1, "scrapXp": 12 }
   ],
   "passives": [
     { "name": "Stone Skin", "defense": 2 },

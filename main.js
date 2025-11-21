@@ -18,18 +18,18 @@ const ROOM_DEFINITIONS = [
     gridHeight: 7,
     tiles: [
       '##########',
-      '#P....G.E#',
-      '#....##..#',
-      '#........#',
-      '#..S.....#',
-      '#........#',
+      '#P..R...E#',
+      '#.Sr.#...#',
+      '#...O....#',
+      '#..b#B.g.#',
+      '#...G....#',
       '##########'
     ],
     entities: [
       { kind: 'playerSpawn', x: 1, y: 1 },
       { kind: 'enemy', enemyType: 'Goblin Cutthroat', x: 6, y: 1 },
-      { kind: 'enemy', enemyType: 'Skeleton Guard', x: 3, y: 4 },
-      { kind: 'puzzle', x: 3, y: 4 },
+      { kind: 'enemy', enemyType: 'Skeleton Guard', x: 6, y: 3 },
+      { kind: 'puzzle', x: 2, y: 2 },
       { kind: 'exit', x: 8, y: 1 }
     ],
   },
@@ -47,7 +47,7 @@ const ROOM_DEFINITIONS = [
       '#P.....E#',
       '#...#...#',
       '#...#...#',
-      '#..B#...#',
+      '#...#...#',
       '#.......#',
       '#########'
     ],
@@ -108,6 +108,7 @@ let state = {
   player: null,
   currentRoom: null,
   selectedDate: todayStr,
+  baseGrid: [],
   grid: [],
   entities: [],
   playerPos: { x: 0, y: 0 },
@@ -118,6 +119,7 @@ let state = {
   effects: { tempAttack: 0, autoPuzzle: false, escape: false },
   lastDeath: null,
   lockedOutDate: null,
+  doorState: { red: false, blue: false, green: false },
 };
 
 async function fetchJsonWithFallback(path) {
@@ -568,18 +570,74 @@ function setSelectedDate(date) {
   if (state.activeTab === 'editor') renderEditorPanel();
 }
 
-function buildGrid(room) {
-  const grid = [];
+function initGrid(room) {
+  const baseGrid = [];
+  const overlayGrid = [];
   for (let y = 0; y < room.gridHeight; y++) {
-    const row = [];
+    const baseRow = [];
+    const overlayRow = [];
     const line = room.tiles[y] || ''.padEnd(room.gridWidth, '.');
     for (let x = 0; x < room.gridWidth; x++) {
       const ch = line[x] || '.';
-      row.push(ch);
+      if (ch === 'O') {
+        baseRow.push('.');
+        overlayRow.push('O');
+      } else {
+        baseRow.push(ch);
+        overlayRow.push(ch);
+      }
     }
-    grid.push(row);
+    baseGrid.push(baseRow);
+    overlayGrid.push(overlayRow);
   }
-  return grid;
+  state.baseGrid = baseGrid;
+  state.grid = overlayGrid;
+}
+
+function getOverlayTile(x, y) {
+  return state.grid?.[y]?.[x] ?? '.';
+}
+
+function setOverlayTile(x, y, value) {
+  if (state.grid?.[y]) state.grid[y][x] = value;
+}
+
+function getBaseTile(x, y) {
+  return state.baseGrid?.[y]?.[x] ?? '.';
+}
+
+function setBaseTile(x, y, value) {
+  if (state.baseGrid?.[y]) state.baseGrid[y][x] = value;
+}
+
+function isDoorTile(tile) {
+  return ['R', 'B', 'G'].includes(tile);
+}
+
+function isPlateTile(tile) {
+  return ['r', 'b', 'g'].includes(tile);
+}
+
+function plateColor(tile) {
+  return tile === 'r' ? 'red' : tile === 'b' ? 'blue' : tile === 'g' ? 'green' : null;
+}
+
+function doorColor(tile) {
+  return tile === 'R' ? 'red' : tile === 'B' ? 'blue' : tile === 'G' ? 'green' : null;
+}
+
+function isDoorOpen(tile) {
+  const color = doorColor(tile);
+  if (!color) return true;
+  return state.doorState[color];
+}
+
+function collisionTileAt(x, y) {
+  const overlay = getOverlayTile(x, y);
+  if (overlay !== '.') return overlay;
+  const base = getBaseTile(x, y);
+  if (isDoorTile(base)) return isDoorOpen(base) ? '.' : base;
+  return base;
 }
 
 async function renderDungeonPanel() {
@@ -649,8 +707,9 @@ async function renderDungeonPanel() {
 
   state.currentRoom = JSON.parse(JSON.stringify(room));
   state.keys = 0;
-  state.grid = buildGrid(room);
+  initGrid(room);
   initEntities(room);
+  updateDoors();
   content.innerHTML = `
       <div id="game-root" class="game-root">
         <h2>${room.name}</h2>
@@ -715,20 +774,29 @@ function renderGrid() {
         cell.className = 'label-cell row-label';
         cell.textContent = y;
       } else {
-        const tile = state.grid[y][x];
+        const baseTile = getBaseTile(x, y);
+        const overlayTile = getOverlayTile(x, y);
+        const displayTile = overlayTile !== '.' ? overlayTile : baseTile;
         cell.classList.add('cell');
         cell.dataset.x = x; cell.dataset.y = y;
         const ent = state.entities.find((e) => e.x === x && e.y === y);
-        if (tile === '#') cell.classList.add('tile-wall');
-        else if (tile === 'S') cell.classList.add('tile-puzzle');
-        else if (tile === 'T') cell.classList.add('tile-trap');
-        else if (tile === 'O') cell.classList.add('tile-obstacle');
-        else if (tile === 'K') cell.classList.add('tile-key');
-        else if (tile === 'L') cell.classList.add('tile-locked');
-        else if (tile === 'E') cell.classList.add('tile-exit');
+        if (displayTile === '#') cell.classList.add('tile-wall');
+        else if (displayTile === 'S') cell.classList.add('tile-puzzle');
+        else if (displayTile === 'T') cell.classList.add('tile-trap');
+        else if (isPlateTile(displayTile)) cell.classList.add(`tile-plate-${plateColor(displayTile)}`);
+        else if (displayTile === 'O') cell.classList.add('tile-pushable');
+        else if (displayTile === 'K') cell.classList.add('tile-key');
+        else if (displayTile === 'L') cell.classList.add('tile-locked');
+        else if (isDoorTile(displayTile) || isDoorTile(baseTile)) {
+          const doorBase = isDoorTile(displayTile) ? displayTile : baseTile;
+          const color = doorColor(doorBase);
+          cell.classList.add(`tile-door-${color}${isDoorOpen(doorBase) ? '-open' : ''}`);
+        }
+        else if (displayTile === 'E') cell.classList.add('tile-exit');
         else cell.classList.add('tile-floor');
         if (ent) cell.classList.add(entityClass(ent));
-        cell.textContent = ent ? entityGlyph(ent) : '';
+        const glyph = ent ? entityGlyph(ent) : tileGlyph(baseTile, overlayTile);
+        cell.textContent = glyph;
       }
       wrap.appendChild(cell);
     }
@@ -744,12 +812,46 @@ function entityClass(ent) {
 }
 
 function entityGlyph(ent) {
-  if (ent.kind === 'player') return 'P';
-  if (ent.kind === 'enemy') return 'G';
-  if (ent.kind === 'boss') return 'B';
-  if (ent.kind === 'exit') return 'E';
-  if (ent.kind === 'puzzle') return '?';
+  if (ent.kind === 'player') return '🧭';
+  if (ent.kind === 'enemy') return '⚔️';
+  if (ent.kind === 'boss') return '👑';
+  if (ent.kind === 'exit') return '🚪';
+  if (ent.kind === 'puzzle') return '❓';
   return '';
+}
+
+function tileGlyph(baseTile, overlayTile) {
+  if (overlayTile === 'O') return '⬜';
+  if (overlayTile !== '.') {
+    if (isDoorTile(overlayTile)) {
+      const color = doorColor(overlayTile);
+      return color === 'red' ? '🟥' : color === 'blue' ? '🟦' : '🟩';
+    }
+    if (overlayTile === 'K') return '🔑';
+    if (overlayTile === 'L') return '🔒';
+    if (overlayTile === 'E') return '🚪';
+    if (overlayTile === 'T') return '⚠️';
+    if (overlayTile === 'S') return '✨';
+    return overlayTile;
+  }
+  if (isDoorTile(baseTile)) {
+    const color = doorColor(baseTile);
+    const openSymbol = '🚪';
+    return color === 'red' ? (state.doorState.red ? openSymbol : '🟥')
+      : color === 'blue' ? (state.doorState.blue ? openSymbol : '🟦')
+      : state.doorState.green ? openSymbol : '🟩';
+  }
+  if (isPlateTile(baseTile)) {
+    const color = plateColor(baseTile);
+    return color === 'red' ? '🔴' : color === 'blue' ? '🔵' : '🟢';
+  }
+  if (baseTile === '#') return '🧱';
+  if (baseTile === 'K') return '🔑';
+  if (baseTile === 'L') return '🔒';
+  if (baseTile === 'E') return '🚪';
+  if (baseTile === 'T') return '⚠️';
+  if (baseTile === 'S') return '✨';
+  return '·';
 }
 
 function initEntities(room) {
@@ -885,6 +987,82 @@ function setupSwipeControls() {
   root.dataset.swipeAttached = '1';
 }
 
+function getPlayerAttackRange() {
+  const cls = state.player?.class;
+  if (cls === 'Rogue') return 2;
+  if (cls === 'Mage') return 3;
+  return 1;
+}
+
+function nearestEnemyWithin(range) {
+  let best = null;
+  let bestDist = Infinity;
+  state.entities
+    .filter((e) => ['enemy', 'boss'].includes(e.kind))
+    .forEach((e) => {
+      const d = Math.abs(e.x - state.playerPos.x) + Math.abs(e.y - state.playerPos.y);
+      if (d <= range && d < bestDist) { best = e; bestDist = d; }
+    });
+  return best;
+}
+
+function playerStrike(enemy) {
+  const player = state.player;
+  const derived = getDerivedStats();
+  const defense = enemy.kind === 'boss' ? enemy.defense || (4 + player.level) : ENEMIES[enemy.enemyType]?.defense || 1;
+  const dmg = Math.max(1, derived.attack - defense);
+  const crit = Math.random() < derived.critChance / 100;
+  const dealt = crit ? dmg * 2 : dmg;
+  enemy.hp -= dealt;
+  log(`${player.name} hits ${enemy.enemyType || enemy.kind} for ${dealt}${crit ? ' (CRIT)' : ''}.`);
+  if (enemy.hp <= 0) {
+    state.entities = state.entities.filter((e) => e !== enemy);
+    if (state.currentRoom.type === 'boss' && !state.entities.some((e) => e.kind === 'boss')) log('Boss defeated!');
+  }
+}
+
+function attemptPlayerAttack() {
+  const target = nearestEnemyWithin(getPlayerAttackRange());
+  if (!target) return false;
+  playerStrike(target);
+  return true;
+}
+
+function isPlateActive(color) {
+  for (let y = 0; y < state.baseGrid.length; y++) {
+    for (let x = 0; x < state.baseGrid[y].length; x++) {
+      const tile = state.baseGrid[y][x];
+      if (plateColor(tile) !== color) continue;
+      const hasPlayer = state.playerPos.x === x && state.playerPos.y === y;
+      const hasPushable = getOverlayTile(x, y) === 'O';
+      const hasEntity = state.entities.some((e) => e.kind !== 'player' && e.x === x && e.y === y);
+      if (hasPlayer || hasPushable || hasEntity) return true;
+    }
+  }
+  return false;
+}
+
+function updateDoors() {
+  state.doorState.red = isPlateActive('red');
+  state.doorState.blue = isPlateActive('blue');
+  state.doorState.green = isPlateActive('green');
+
+  for (let y = 0; y < state.baseGrid.length; y++) {
+    for (let x = 0; x < state.baseGrid[y].length; x++) {
+      const base = state.baseGrid[y][x];
+      if (!isDoorTile(base)) continue;
+      const color = doorColor(base);
+      const shouldOpen = state.doorState[color];
+      const overlay = getOverlayTile(x, y);
+      if (shouldOpen) {
+        if (overlay === base) setOverlayTile(x, y, '.');
+      } else {
+        if (overlay === '.') setOverlayTile(x, y, base);
+      }
+    }
+  }
+}
+
 function handleMove(dir) {
   if (!state.currentRoom) return;
 
@@ -910,23 +1088,24 @@ function handleMove(dir) {
   const nx = state.playerPos.x + delta[0];
   const ny = state.playerPos.y + delta[1];
   if (!inBounds(nx, ny)) return;
-  const tile = state.grid[ny][nx];
+  const tile = collisionTileAt(nx, ny);
   if (tile === '#') return;
   if (tile === 'O') {
     const pushX = nx + delta[0];
     const pushY = ny + delta[1];
-    const blockingTiles = ['#', 'O', 'E', 'S', 'T', 'L', 'K'];
+    const blockingTiles = ['#', 'O', 'E', 'S', 'T', 'L', 'K', 'R', 'B', 'G'];
     if (!inBounds(pushX, pushY)) return;
-    const nextTile = state.grid[pushY][pushX];
+    const nextTile = collisionTileAt(pushX, pushY);
     const blockedByEntity = state.entities.some((e) => e.kind !== 'player' && e.x === pushX && e.y === pushY);
     if (blockingTiles.includes(nextTile) || blockedByEntity) return;
-    state.grid[pushY][pushX] = 'O';
-    state.grid[ny][nx] = '.';
+    setOverlayTile(pushX, pushY, 'O');
+    setOverlayTile(nx, ny, '.');
   }
   if (tile === 'L') {
     if (state.keys <= 0) { log('The door is locked. You need a key.'); return; }
     state.keys -= 1;
-    state.grid[ny][nx] = '.';
+    setBaseTile(nx, ny, '.');
+    setOverlayTile(nx, ny, '.');
     log('You unlock the door.');
   }
   const ent = state.entities.find((e) => e.x === nx && e.y === ny && e.kind !== 'player');
@@ -937,7 +1116,10 @@ function handleMove(dir) {
       state.entities = state.entities.filter((e) => e !== ent);
     }
     if (ent.kind === 'exit') return tryExit();
-    if (['enemy','boss'].includes(ent.kind)) return resolveCombat(ent);
+    if (['enemy','boss'].includes(ent.kind)) {
+      attemptPlayerAttack();
+      return advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
+    }
     if (ent.kind === 'puzzle') return openPuzzle(ent);
   }
   state.playerPos = { x: nx, y: ny };
@@ -945,40 +1127,20 @@ function handleMove(dir) {
   if (playerEntity) { playerEntity.x = nx; playerEntity.y = ny; }
   if (tile === 'K') {
     state.keys += 1;
-    state.grid[ny][nx] = '.';
+    setBaseTile(nx, ny, '.');
+    setOverlayTile(nx, ny, '.');
     log('You pick up a key.');
   }
   if (tile === 'S') return openPuzzle({ x: nx, y: ny, kind: 'puzzle' });
   if (tile === 'T') return triggerTrap(nx, ny);
   if (tile === 'E') return tryExit();
+  updateDoors();
   advanceEnemiesAfterPlayerAction();
 }
 
 function inBounds(x,y){
   const r = state.currentRoom;
   return x >=0 && y>=0 && x<r.gridWidth && y<r.gridHeight;
-}
-
-function resolveCombat(enemy) {
-  const player = state.player;
-  const derived = getDerivedStats();
-  const dmg = Math.max(
-    1,
-    derived.attack - (enemy.kind === 'boss' ? enemy.defense || (4 + player.level) : ENEMIES[enemy.enemyType]?.defense || 1)
-  );
-  const crit = Math.random() < derived.critChance / 100;
-  const dealt = crit ? dmg * 2 : dmg;
-  enemy.hp -= dealt;
-  log(`${player.name} hits ${enemy.enemyType || enemy.kind} for ${dealt}${crit?' (CRIT)':''}.`);
-  if (enemy.hp <= 0) {
-    state.entities = state.entities.filter((e) => e !== enemy);
-    renderGrid();
-    if (state.currentRoom.type === 'boss' && !state.entities.some((e) => e.kind==='boss')) log('Boss defeated!');
-    advanceEnemiesAfterPlayerAction();
-    return;
-  }
-  enemyAttack(enemy);
-  advanceEnemiesAfterPlayerAction();
 }
 
 function enemyAttack(enemy) {
@@ -1023,9 +1185,13 @@ function enemyTurn() {
   });
 }
 
-function advanceEnemiesAfterPlayerAction() {
+function advanceEnemiesAfterPlayerAction(options = {}) {
   if (!state.player || state.player.stats.hpCurrent <= 0) return;
+  const { performPlayerAttack = true } = options;
+  updateDoors();
+  if (performPlayerAttack) attemptPlayerAttack();
   enemyTurn();
+  updateDoors();
   renderGrid();
   renderStatus();
   savePlayer();
@@ -1033,8 +1199,8 @@ function advanceEnemiesAfterPlayerAction() {
 
 function attemptMove(ent, pos) {
   if (!inBounds(pos.x,pos.y)) return false;
-  const tile = state.grid[pos.y][pos.x];
-  if (['#','O','E','S','T','L'].includes(tile)) return false;
+  const tile = collisionTileAt(pos.x, pos.y);
+  if (['#','O','E','S','T','L','K','R','B','G'].includes(tile)) return false;
   if (state.entities.some((e) => e!==ent && e.x === pos.x && e.y === pos.y)) return false;
   ent.x = pos.x; ent.y = pos.y; return true;
 }
@@ -1061,7 +1227,7 @@ function openPuzzle(ent) {
   if (!pos) return;
   const config = getPuzzleConfigAt(pos.x, pos.y);
   if (!config) {
-    if (state.grid[pos.y]?.[pos.x] === 'S') {
+    if (getBaseTile(pos.x, pos.y) === 'S') {
       log('This puzzle needs a configuration.');
     }
     return;
@@ -1100,7 +1266,8 @@ function openPuzzle(ent) {
 }
 
 function clearPuzzleTile(x,y){
-  state.grid[y][x]='.';
+  setBaseTile(x, y, '.');
+  setOverlayTile(x, y, '.');
   state.entities = state.entities.filter((e)=>!(e.kind==='puzzle' && e.x===x && e.y===y));
   if (state.currentRoom?.puzzleConfigs) {
     state.currentRoom.puzzleConfigs = state.currentRoom.puzzleConfigs.filter((p)=>!(p.x===x && p.y===y));
@@ -1141,7 +1308,8 @@ function triggerTrap(x,y){
     const total = d20 + pick.bonus;
     const success = total >= config.dc;
     modal.classList.add('hidden');
-    state.grid[y][x]='.';
+    setBaseTile(x, y, '.');
+    setOverlayTile(x, y, '.');
     log(`Trap roll ${total} (${pick.label}) ${success?'succeeds':'fails'}.`);
     if (!success) {
       state.player.stats.hpCurrent -= config.damage;
@@ -1185,7 +1353,9 @@ function finalizePlayerDeath(record) {
   localStorage.removeItem('dd_player');
   state.player = null;
   state.currentRoom = null;
+  state.baseGrid = [];
   state.grid = [];
+  state.doorState = { red: false, blue: false, green: false };
   state.entities = [];
   clearActionBar();
   renderDungeonPanel();
@@ -1432,8 +1602,9 @@ function setActionBar(){
   const attack = document.createElement('button');
   attack.textContent = 'Attack';
   attack.onclick = ()=>{
-    const foe = nearestEnemy();
-    if (foe) resolveCombat(foe);
+    const attacked = attemptPlayerAttack();
+    if (!attacked) log('No enemy in range.');
+    advanceEnemiesAfterPlayerAction({ performPlayerAttack: false });
   };
   const interact = document.createElement('button');
   interact.textContent = 'Interact';
@@ -1505,16 +1676,22 @@ function buildPalette(){
   const buttons = [
     { key: '.', label:'Floor' },
     { key: '#', label:'Wall' },
-    { key: 'O', label:'Obstacle' },
+    { key: 'O', label:'Pushable' },
     { key: 'K', label:'Key' },
     { key: 'L', label:'Locked Door' },
+    { key: 'R', label:'Red Door' },
+    { key: 'B', label:'Blue Door' },
+    { key: 'G', label:'Green Door' },
+    { key: 'r', label:'Red Plate' },
+    { key: 'b', label:'Blue Plate' },
+    { key: 'g', label:'Green Plate' },
     { key: 'E', label:'Exit' },
     { key: 'T', label:'Trap' },
     { key: 'S', label:'Puzzle' },
     { key: 'D', label:'Decoration' },
     { key: 'P', label:'Player Spawn' },
-    { key: 'G', label:'Enemy' },
-    { key: 'B', label:'Boss' }
+    { key: 'N', label:'Enemy' },
+    { key: 'X', label:'Boss' }
   ];
   pal.innerHTML = buttons.map((b)=>`<button data-k="${b.key}">${b.label}</button>`).join('');
   pal.dataset.current = '.';
@@ -1574,15 +1751,36 @@ function resizeEditorGridFromInputs(){
 }
 
 function updateEditorCell(cell, key){
-  cell.textContent=key==='P'?'P': key==='G'?'G': key==='B'?'B': key==='K'?'K': key==='L'?'L':'';
+  const glyphMap = {
+    '#': '🧱',
+    'O': '⬜',
+    'K': '🔑',
+    'L': '🔒',
+    'R': '🟥',
+    'B': '🟦',
+    'G': '🟩',
+    'r': '🔴',
+    'b': '🔵',
+    'g': '🟢',
+    'E': '🚪',
+    'T': '⚠️',
+    'S': '✨',
+    'X': '👑',
+    'N': '⚔️',
+  };
+  cell.textContent = glyphMap[key] || (['P','N','X'].includes(key) ? key : '·');
   cell.className='cell';
   if (key==='#') cell.classList.add('tile-wall');
-  else if (key==='O') cell.classList.add('tile-obstacle');
+  else if (key==='O') cell.classList.add('tile-pushable');
   else if (key==='E') cell.classList.add('tile-exit');
   else if (key==='T') cell.classList.add('tile-trap');
   else if (key==='S') cell.classList.add('tile-puzzle');
   else if (key==='K') cell.classList.add('tile-key');
   else if (key==='L') cell.classList.add('tile-locked');
+  else if (['R','B','G'].includes(key)) cell.classList.add(`tile-door-${doorColor(key)}`);
+  else if (['r','b','g'].includes(key)) cell.classList.add(`tile-plate-${plateColor(key)}`);
+  else if (key==='X') cell.classList.add('entity-boss');
+  else if (key==='N') cell.classList.add('entity-enemy');
   else cell.classList.add('tile-floor');
 }
 
@@ -1661,10 +1859,10 @@ async function loadEditorRoom(date){
     const tileGrid = room.tiles.map((row)=>row.split(''));
     room.entities.forEach((ent)=>{
       if (ent.kind==='playerSpawn') tileGrid[ent.y][ent.x]='P';
-      if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='G';
-      if (ent.kind==='boss') tileGrid[ent.y][ent.x]='B';
+      if (ent.kind==='enemy') tileGrid[ent.y][ent.x]='N';
+      if (ent.kind==='boss') tileGrid[ent.y][ent.x]='X';
     });
-    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','G','B','K','L'].includes(c)?c:'.')));
+    buildEditorGrid(tileGrid.map((row)=>row.map((c)=>['.','#','O','E','T','S','D','P','N','X','K','L','R','B','G','r','b','g'].includes(c)?c:'.')));
     const puzzleList = qs('#puzzleList');
     const trapList = qs('#trapList');
     puzzleList.innerHTML='';
@@ -1696,8 +1894,8 @@ function saveEditorRoom(){
   let hasBoss = false;
   grid.forEach((row,y)=>row.forEach((cell,x)=>{
     if (cell==='P') entities.push({ kind:'playerSpawn', x,y });
-    if (cell==='G') entities.push({ kind:'enemy', enemyType:'Goblin Cutthroat', x,y });
-    if (cell==='B') { hasBoss = true; entities.push({ kind:'boss', bossType: qs('#edBoss').value, x,y }); }
+    if (cell==='N') entities.push({ kind:'enemy', enemyType:'Goblin Cutthroat', x,y });
+    if (cell==='X') { hasBoss = true; entities.push({ kind:'boss', bossType: qs('#edBoss').value, x,y }); }
     if (cell==='E') entities.push({ kind:'exit', x, y });
     if (cell==='S') entities.push({ kind:'puzzle', x, y });
   }));
@@ -1724,7 +1922,7 @@ function saveEditorRoom(){
     failureText: qs('#edFailure').value,
     gridWidth: width,
     gridHeight: height,
-    tiles: grid.map((row)=>row.map((c)=>['P','G','B'].includes(c)?'.':c).join('')),
+    tiles: grid.map((row)=>row.map((c)=>['P','N','X'].includes(c)?'.':c).join('')),
     entities,
     puzzleConfigs,
     trapConfigs,

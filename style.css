@@ -39,7 +39,7 @@ textarea { min-height: 70px; }
 .hidden { display: none !important; }
 .grid {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   background: #0a0f20;
   padding: 12px;
   border-radius: 14px;

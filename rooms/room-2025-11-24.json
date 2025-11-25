@@ -1,0 +1,78 @@
+{
+  "date": "2025-11-24",
+  "type": "puzzle",
+  "name": "Frostbridge Riddle",
+  "introText": "A frozen canal splits the chamber. Narrow bridges and biting winds make every step a puzzle of timing.",
+  "successText": "You cross the frost bridge as the ice settles behind you.",
+  "failureText": "The ice groans and you are forced back to the entrance.",
+  "gridWidth": 11,
+  "gridHeight": 9,
+  "tiles": [
+    "###########",
+    "#..#...#E.#",
+    "#..#.#.#..#",
+    "#..#.#.#..#",
+    "#..#...#..#",
+    "#.###.###.#",
+    "#.....P...#",
+    "#.#######.#",
+    "###########"
+  ],
+  "entities": [
+    {
+      "kind": "playerSpawn",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "kind": "exit",
+      "x": 9,
+      "y": 1
+    },
+    {
+      "kind": "puzzle",
+      "x": 6,
+      "y": 6
+    }
+  ],
+  "puzzleConfigs": [
+    {
+      "x": 6,
+      "y": 6,
+      "question": "Which month holds the deepest winter in the northern lands?",
+      "options": [
+        "November",
+        "December",
+        "February"
+      ],
+      "answer": 1
+    }
+  ],
+  "trapConfigs": [
+    {
+      "x": 5,
+      "y": 5,
+      "intro": "A hidden patch of thin ice cracks underfoot!",
+      "dc": 12,
+      "damage": 6
+    }
+  ],
+  "puzzleConfig": {
+    "x": 6,
+    "y": 6,
+    "question": "Which month holds the deepest winter in the northern lands?",
+    "options": [
+      "November",
+      "December",
+      "February"
+    ],
+    "answer": 1
+  },
+  "trapConfig": {
+    "x": 5,
+    "y": 5,
+    "intro": "A hidden patch of thin ice cracks underfoot!",
+    "dc": 12,
+    "damage": 6
+  }
+}

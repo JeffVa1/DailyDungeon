@@ -163,7 +163,7 @@ function getCellSizing() {
 }
 
 async function fetchJsonWithFallback(path) {
-  const url = path;
+  const url = new URL(path, window.location.href).toString();
   try {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {

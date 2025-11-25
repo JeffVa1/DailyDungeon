@@ -1,3 +1,5 @@
+// dataLoader.js
+// Fetches static JSON data and owner room files, handling fallbacks and persistence for offline use.
 import {
   DEFAULT_BOSSES,
   DEFAULT_ENEMIES,
@@ -10,6 +12,7 @@ import {
   setLoot,
 } from './state.js';
 
+// Attempts to fetch JSON without caching; logs failures and returns null on error.
 export async function fetchJsonWithFallback(path) {
   try {
     const res = await fetch(path, { cache: 'no-store' });
@@ -24,6 +27,7 @@ export async function fetchJsonWithFallback(path) {
   return null;
 }
 
+// Loads loot/enemy/boss data with defaults to keep the game playable offline.
 export async function loadStaticData() {
   const [loot, enemies, bosses] = await Promise.all([
     fetchJsonWithFallback('data/loot.json'),
@@ -48,6 +52,7 @@ export function saveRoomFiles(obj) {
   localStorage.setItem('dd_room_files', JSON.stringify(obj));
 }
 
+// Retrieves a room file for a given date from disk or cached storage when available.
 export async function loadRoomFromFile(date) {
   const filename = getRoomFilename(date);
   const saved = getSavedRoomFiles();

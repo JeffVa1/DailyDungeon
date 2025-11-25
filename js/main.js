@@ -1,202 +1,29 @@
-const qs = (sel) => document.querySelector(sel);
-const qsa = (sel) => Array.from(document.querySelectorAll(sel));
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function getEasternDateParts(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = { year: '1970', month: '01', day: '01' };
-  formatter.formatToParts(date).forEach(({ type, value }) => {
-    if (type === 'year' || type === 'month' || type === 'day') {
-      parts[type] = value;
-    }
-  });
-  return parts;
-}
-
-function formatDateForEastern(date = new Date()) {
-  const { year, month, day } = getEasternDateParts(date);
-  return `${year}-${month}-${day}`;
-}
-
-function getEasternWeekdayIndex(date = new Date()) {
-  const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'long',
-  }).format(date);
-  return WEEKDAYS.indexOf(weekday);
-}
-
-const todayStr = formatDateForEastern();
-const ownerMode = location.search.includes('owner=1');
-const ROOM_FILE_PREFIX = 'room-';
-const ROOM_FILE_FOLDER = 'rooms';
-const ROOM_FILE_EXTENSION = '.json';
-
-const ROOM_DEFINITIONS = [
-  {
-    date: todayStr,
-    type: 'combat',
-    name: 'Training Grounds',
-    introText: 'A compact room to practice your skills.',
-    successText: 'You catch your breath and spot the exit.',
-    failureText: 'You fall during practice — rest and return tomorrow.',
-    gridWidth: 10,
-    gridHeight: 7,
-    tiles: [
-      '##########',
-      '#P..R...E#',
-      '#.Sr.#...#',
-      '#...O....#',
-      '#..b#B.g.#',
-      '#...G....#',
-      '##########'
-    ],
-    entities: [
-      { kind: 'playerSpawn', x: 1, y: 1 },
-      { kind: 'enemy', enemyType: 'Goblin Cutthroat', x: 6, y: 1 },
-      { kind: 'enemy', enemyType: 'Skeleton Guard', x: 6, y: 3 },
-      { kind: 'puzzle', x: 2, y: 2 },
-      { kind: 'exit', x: 8, y: 1 }
-    ],
-  },
-  {
-    date: getNextWeekdayDate('Friday'),
-    type: 'boss',
-    name: 'Hall of Echoes',
-    introText: 'A resonant chamber where a fearsome foe awaits.',
-    successText: 'The echoes fade as the boss falls.',
-    failureText: 'The chamber claims another hero.',
-    gridWidth: 9,
-    gridHeight: 7,
-    tiles: [
-      '#########',
-      '#P.....E#',
-      '#...#...#',
-      '#...#...#',
-      '#...#...#',
-      '#.......#',
-      '#########'
-    ],
-    entities: [
-      { kind: 'playerSpawn', x: 1, y: 1 },
-      { kind: 'boss', bossType: 'The Hollow Knight', x: 3, y: 4 },
-      { kind: 'exit', x: 7, y: 1 }
-    ],
-    bossConfig: { name: 'The Hollow Knight' }
-  }
-];
-
-const DEFAULT_ENEMIES = {
-  'Goblin Cutthroat': { hp: 10, attack: 4, defense: 1, crit: 0.1 },
-  'Skeleton Guard': { hp: 14, attack: 3, defense: 3, crit: 0.05 },
-  'Cave Slime': { hp: 18, attack: 2, defense: 0, crit: 0.02 },
-  'Shadow Wolf': { hp: 20, attack: 5, defense: 2, crit: 0.1 },
-  'Ironbound Archer': { hp: 16, attack: 6, defense: 1, crit: 0.1 },
-};
-
-const DEFAULT_LOOT = {
-  weapons: [
-    { name: 'Rusty Dagger', attack: 1, scrapXp: 5 },
-    { name: 'Iron Longsword', attack: 3, scrapXp: 8 },
-    { name: 'Ember Wand', magic: 2, scrapXp: 9 },
-    { name: 'Shadow Bow', attack: 2, crit: 3, scrapXp: 10 },
-    { name: 'Ogre Smasher', attack: 5, defense: -1, scrapXp: 12 },
-  ],
-  passives: [
-    { name: 'Stone Skin', defense: 2 },
-    { name: 'Quick Learner', xp: 0.1 },
-    { name: 'Bloodthirst', healOnKill: 2 },
-    { name: 'Arcane Wellspring', magic: 3 },
-    { name: 'Nimble Reflexes', dodge: 0.05 },
-  ],
-  items: [
-    { name: 'Small Potion', heal: 10 },
-    { name: 'Greater Potion', heal: 20 },
-    { name: 'Battle Brew', tempAttack: 2 },
-    { name: 'Smoke Bomb', escape: true },
-    { name: 'Elixir of Clarity', autoPuzzle: true },
-  ],
-};
-
-const DEFAULT_BOSSES = ['The Hollow Knight', 'Maw of Cinders', 'Oracle of Dust'];
-
-let ENEMIES = { ...DEFAULT_ENEMIES };
-let LOOT = { ...DEFAULT_LOOT };
-let BOSSES = [...DEFAULT_BOSSES];
-
-const CLASSES = {
-  Warrior: { strength: 8, dexterity: 4, wisdom: 3, vitality: 8 },
-  Rogue: { strength: 4, dexterity: 8, wisdom: 4, vitality: 7 },
-  Mage: { strength: 3, dexterity: 4, wisdom: 9, vitality: 6 },
-};
-
-let state = {
-  player: null,
-  currentRoom: null,
-  selectedDate: todayStr,
-  baseGrid: [],
-  grid: [],
-  entities: [],
-  playerPos: { x: 0, y: 0 },
-  keys: 0,
-  activeTab: 'dungeon',
-  owner: ownerMode,
-  combatLog: [],
-  effects: { tempAttack: 0, autoPuzzle: false, escape: false },
-  lastDeath: null,
-  lockedOutDate: null,
-  doorState: { red: false, blue: false, green: false },
-  dungeonView: 'dungeon',
-};
-
-function getCellSizing() {
-  const styles = getComputedStyle(document.documentElement);
-  const cellSize = styles.getPropertyValue('--cell-size').trim() || '28px';
-  const labelSize = styles.getPropertyValue('--label-size').trim() || '32px';
-  const labelHeight = styles.getPropertyValue('--label-height').trim() || '24px';
-  return { cellSize, labelSize, labelHeight };
-}
-
-async function fetchJsonWithFallback(path) {
-  const url = new URL(path, window.location.href).toString();
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) {
-      console.warn(`Fetch failed for ${url} with status ${res.status}`);
-    } else {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Fetch error for', url, err);
-  }
-  return new Promise((resolve, reject) => {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.overrideMimeType('application/json');
-      xhr.open('GET', url, true);
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try { resolve(JSON.parse(xhr.responseText || 'null')); }
-          catch (e) { reject(e); }
-        } else {
-          reject(new Error('XHR status ' + xhr.status));
-        }
-      };
-      xhr.onerror = () => reject(new Error('XHR network error'));
-      xhr.send();
-    } catch (err) {
-      reject(err);
-    }
-  }).catch((err) => {
-    console.warn('Fallback load failed for', path, err);
-    return null;
-  });
-}
+import {
+  fetchJsonWithFallback,
+  getCellSizing,
+  qs,
+  qsa,
+  randomFrom,
+} from './utils.js';
+import {
+  BOSSES,
+  CLASSES,
+  DEFAULT_BOSSES,
+  DEFAULT_ENEMIES,
+  DEFAULT_LOOT,
+  ENEMIES,
+  LOOT,
+  ROOM_DEFINITIONS,
+  ROOM_FILE_EXTENSION,
+  ROOM_FILE_FOLDER,
+  ROOM_FILE_PREFIX,
+  ownerMode,
+  setBosses,
+  setEnemies,
+  setLoot,
+  state,
+  todayStr,
+} from './state.js';
 
 async function loadStaticData() {
   const [loot, enemies, bosses] = await Promise.all([
@@ -204,9 +31,9 @@ async function loadStaticData() {
     fetchJsonWithFallback('data/enemies.json'),
     fetchJsonWithFallback('data/bosses.json'),
   ]);
-  LOOT = loot || DEFAULT_LOOT;
-  ENEMIES = enemies || DEFAULT_ENEMIES;
-  BOSSES = bosses || [...DEFAULT_BOSSES];
+  setLoot(loot || DEFAULT_LOOT);
+  setEnemies(enemies || DEFAULT_ENEMIES);
+  setBosses(bosses || [...DEFAULT_BOSSES]);
 }
 
 function getDerivedStats(includeEffects = true) {
@@ -290,16 +117,6 @@ function normalizeRoom(room) {
   });
 
   return copy;
-}
-
-function getNextWeekdayDate(name) {
-  const target = WEEKDAYS.indexOf(name);
-  if (target === -1) return formatDateForEastern();
-  const todayParts = getEasternDateParts();
-  const baseDate = new Date(Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day));
-  const diff = (target - getEasternWeekdayIndex(baseDate) + 7) % 7 || 7;
-  const next = new Date(baseDate.getTime() + diff * 86400000);
-  return formatDateForEastern(next);
 }
 
 function savePlayer() {
@@ -1696,8 +1513,6 @@ function useItem(index){
   renderEffectTracker();
   savePlayer();
 }
-
-function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
 function grantXP(amount){
   let xpGain = amount;

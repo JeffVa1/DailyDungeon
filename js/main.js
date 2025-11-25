@@ -1,16 +1,7 @@
-import {
-  fetchJsonWithFallback,
-  getCellSizing,
-  qs,
-  qsa,
-  randomFrom,
-} from './utils.js';
+import { getCellSizing, qs, qsa, randomFrom } from './utils.js';
 import {
   BOSSES,
   CLASSES,
-  DEFAULT_BOSSES,
-  DEFAULT_ENEMIES,
-  DEFAULT_LOOT,
   ENEMIES,
   LOOT,
   ROOM_DEFINITIONS,
@@ -18,23 +9,16 @@ import {
   ROOM_FILE_FOLDER,
   ROOM_FILE_PREFIX,
   ownerMode,
-  setBosses,
-  setEnemies,
-  setLoot,
   state,
   todayStr,
 } from './state.js';
-
-async function loadStaticData() {
-  const [loot, enemies, bosses] = await Promise.all([
-    fetchJsonWithFallback('data/loot.json'),
-    fetchJsonWithFallback('data/enemies.json'),
-    fetchJsonWithFallback('data/bosses.json'),
-  ]);
-  setLoot(loot || DEFAULT_LOOT);
-  setEnemies(enemies || DEFAULT_ENEMIES);
-  setBosses(bosses || [...DEFAULT_BOSSES]);
-}
+import {
+  getRoomFilename,
+  getSavedRoomFiles,
+  loadRoomFromFile,
+  loadStaticData,
+  saveRoomFiles,
+} from './dataLoader.js';
 
 function getDerivedStats(includeEffects = true) {
   if (!state.player) return {};
@@ -194,35 +178,6 @@ function getOwnerRooms() {
 
 function saveOwnerRooms(obj) {
   localStorage.setItem('dd_owner_rooms', JSON.stringify(obj));
-}
-
-function getSavedRoomFiles() {
-  const raw = localStorage.getItem('dd_room_files');
-  return raw ? JSON.parse(raw) : {};
-}
-
-function saveRoomFiles(obj) {
-  localStorage.setItem('dd_room_files', JSON.stringify(obj));
-}
-
-function getRoomFilename(date) {
-  return `${ROOM_FILE_FOLDER}/${ROOM_FILE_PREFIX}${date}${ROOM_FILE_EXTENSION}`;
-}
-
-async function loadRoomFromFile(date) {
-  const filename = getRoomFilename(date);
-  const saved = getSavedRoomFiles();
-  try {
-    const data = await fetchJsonWithFallback(filename);
-    if (data) {
-      saved[filename] = data;
-      saveRoomFiles(saved);
-      return data;
-    }
-  } catch (err) {
-    console.warn('Room fetch failed for', filename, err);
-  }
-  return saved[filename] || null;
 }
 
 function persistRoomToFile(room) {

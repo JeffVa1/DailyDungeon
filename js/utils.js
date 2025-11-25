@@ -50,40 +50,4 @@ export function getCellSizing() {
   return { cellSize, labelSize, labelHeight };
 }
 
-export async function fetchJsonWithFallback(path) {
-  const url = new URL(path, window.location.href).toString();
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) {
-      console.warn(`Fetch failed for ${url} with status ${res.status}`);
-    } else {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Fetch error for', url, err);
-  }
-  return new Promise((resolve, reject) => {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.overrideMimeType('application/json');
-      xhr.open('GET', url, true);
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try { resolve(JSON.parse(xhr.responseText || 'null')); }
-          catch (e) { reject(e); }
-        } else {
-          reject(new Error('XHR status ' + xhr.status));
-        }
-      };
-      xhr.onerror = () => reject(new Error('XHR network error'));
-      xhr.send();
-    } catch (err) {
-      reject(err);
-    }
-  }).catch((err) => {
-    console.warn('Fallback load failed for', path, err);
-    return null;
-  });
-}
-
 export function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }

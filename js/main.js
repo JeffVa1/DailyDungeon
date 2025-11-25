@@ -1,3 +1,5 @@
+// main.js
+// Main UI controller for DailyDungeon: loads data, tracks state, and renders panels/dungeon interactions.
 import { getCellSizing, qs, qsa, randomFrom } from './utils.js';
 import {
   BOSSES,
@@ -20,6 +22,7 @@ import {
   saveRoomFiles,
 } from './dataLoader.js';
 
+// Calculates player stats from base attributes, equipment, passives, and temporary effects.
 function getDerivedStats(includeEffects = true) {
   if (!state.player) return {};
   const base = state.player.stats || {};
@@ -56,6 +59,7 @@ function getDerivedStats(includeEffects = true) {
   return { strength, dexterity, wisdom, vitality, hpMax, attack, defense, critChance: Math.min(critChance, 100) };
 }
 
+// Keeps player HP within valid bounds based on current vitality-derived maximum.
 function clampPlayerHP() {
   if (!state.player) return;
   const { hpMax } = getDerivedStats(false);
@@ -65,6 +69,7 @@ function clampPlayerHP() {
   }
 }
 
+// Ensures loaded room definitions have puzzle/trap configs populated for any marked tiles.
 function normalizeRoom(room) {
   const copy = JSON.parse(JSON.stringify(room));
   copy.puzzleConfigs = copy.puzzleConfigs || [];
@@ -103,10 +108,12 @@ function normalizeRoom(room) {
   return copy;
 }
 
+// Persists the player's current state to localStorage for future sessions.
 function savePlayer() {
   localStorage.setItem('dd_player', JSON.stringify(state.player));
 }
 
+// Restores a saved player from localStorage and migrates any legacy stats fields.
 function loadPlayer() {
   const data = localStorage.getItem('dd_player');
   if (data) {
@@ -145,6 +152,7 @@ function clearDeathRecord() {
   state.lastDeath = null;
 }
 
+// Backfills legacy player fields and recomputes derived values to keep saves compatible.
 function migratePlayerStats() {
   if (!state.player) return;
   state.player.createdAt = state.player.createdAt || todayStr;
@@ -180,6 +188,7 @@ function saveOwnerRooms(obj) {
   localStorage.setItem('dd_owner_rooms', JSON.stringify(obj));
 }
 
+// Saves the provided room to localStorage and triggers a download for owner editing.
 function persistRoomToFile(room) {
   const filename = getRoomFilename(room.date);
   const files = getSavedRoomFiles();
@@ -202,6 +211,7 @@ function persistRoomToFile(room) {
   }
 }
 
+// Bootstraps data loading, player setup, and initial UI rendering.
 async function init() {
   await loadStaticData();
   if (ownerMode) {

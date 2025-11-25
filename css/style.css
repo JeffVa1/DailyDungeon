@@ -1,3 +1,4 @@
+/* Theme variables */
 * { box-sizing: border-box; }
 :root {
   --bg: #050914;
@@ -16,9 +17,12 @@
   --label-size: 32px;
   --label-height: 24px;
 }
+/* Global layout */
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif; color: #f3f6ff; background: radial-gradient(circle at 10% 20%, #0b1530, #050914 45%); }
 #app { display: flex; flex-direction: column; width: 100vw; height: 100vh; backdrop-filter: blur(4px); }
 #game-root { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* Top bar and tabs */
 .top-bar { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #0d1324, #0a1020); padding: 12px 18px; gap: 12px; border-bottom: 1px solid #1d2540; box-shadow: var(--glow); position: sticky; top: 0; z-index: 5; }
 .title { font-size: 22px; font-weight: 800; letter-spacing: 0.6px; }
 .today { opacity: 0.9; color: var(--muted); }
@@ -30,6 +34,8 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Int
 .tab-btn.active { background: linear-gradient(135deg, #3956c8, #6fa8ff); border-color: #6fa8ff; }
 .tab-btn:hover { background: #1b2542; transform: translateY(-1px); }
 .owner-only { display: none; }
+
+/* Panels and cards */
 .panel { flex: 1; overflow: auto; padding: 18px; background: linear-gradient(180deg, rgba(17,24,48,0.35), rgba(5,9,20,0.6)); }
 .tab-panel { display: none; height: 100%; max-width: 1200px; margin: 0 auto; }
 .tab-panel.active { display: block; }
@@ -41,6 +47,7 @@ label { font-weight: 700; display: block; margin-bottom: 6px; letter-spacing: 0.
 label.short { width: 140px; }
 textarea { min-height: 70px; }
 .hidden { display: none !important; }
+/* Dungeon grid */
 .grid {
   display: grid;
   gap: var(--grid-gap);
@@ -67,6 +74,7 @@ textarea { min-height: 70px; }
 .label-cell.corner { background: transparent; width: var(--label-size); height: var(--label-height); }
 .label-cell.column-label { border-bottom: 1px solid #1f2a45; }
 .label-cell.row-label { border-right: 1px solid #1f2a45; }
+/* Tile variants */
 .tile-floor { background: #121a35; border: 1px solid #1c2745; }
 .tile-wall { background: #3a3f56; border: 1px solid #2b3046; }
 .tile-pushable { background: #332727; border: 1px solid #2a1f1f; }
@@ -83,11 +91,13 @@ textarea { min-height: 70px; }
 .tile-exit { background: #28503a; border: 1px solid #3b7253; }
 .tile-trap { background: #512828; border: 1px solid #723a3a; }
 .tile-puzzle { background: #2c3954; border: 1px solid #3f4f71; }
+/* Entity markers */
 .entity-player { background: #3f7fbf; }
 .entity-enemy { background: #bf4b3f; }
 .entity-boss { background: #bf3fb2; }
 .entity-npc { background: #3fbf8f; }
 .entity-spawn { outline: 2px solid #f0e68c; }
+/* Status and action bars */
 .health-bar { height: 12px; background: #0b1020; border-radius: 999px; overflow: hidden; margin: 6px 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
 .health-fill { height: 100%; background: linear-gradient(90deg, #5dd39e, #6fa8ff); transition: width 0.25s ease; }
 .status-row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
@@ -98,6 +108,7 @@ textarea { min-height: 70px; }
 .status-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .status-name { font-weight: 800; letter-spacing: 0.3px; }
 .muted { color: var(--muted); }
+/* Dungeon layout */
 .game-root { display: grid; gap: 14px; align-items: start; }
 .dungeon-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
 .dungeon-body { display: grid; gap: 12px; justify-items: center; }
@@ -117,6 +128,7 @@ textarea { min-height: 70px; }
 .empty-state { padding: 12px; text-align: center; color: var(--muted); }
 .log-panel { background: #0b1122; border: 1px solid #1f2a45; border-radius: var(--radius); padding: 10px; min-height: 72px; box-shadow: var(--glow); }
 
+/* Map and controls */
 .dungeon-inventory .inventory-card { background: #0f1830; border-color: #22355d; }
 .map-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .calendar-cell { text-align: center; padding: 8px 6px; border-radius: 6px; background: #111423; border: 1px solid #22263f; }
@@ -125,9 +137,11 @@ textarea { min-height: 70px; }
 .calendar-cell.failed { background: #3a1f1f; }
 .dpad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); gap: 6px; justify-content: center; margin-top: 8px; }
 .dpad button { background: #242742; border: 1px solid #30324f; color: #fff; border-radius: 8px; }
+/* Modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; }
 .modal.hidden { display: none; }
 .modal-content { background: #161623; padding: 16px; border-radius: 12px; max-width: 640px; width: 90%; border: 1px solid #30324f; }
+/* Loot and editor */
 .loot-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .loot-card { background: #0f1020; padding: 12px; border-radius: 10px; border: 1px solid #30324f; cursor: pointer; }
 .loot-card:hover { border-color: #6a6fd1; }
@@ -135,6 +149,7 @@ textarea { min-height: 70px; }
 .palette button { padding: 6px 10px; background: #242742; border: 1px solid #30324f; color: #fff; border-radius: 6px; cursor: pointer; }
 fieldset { border: 1px solid #2d3050; border-radius: 8px; padding: 8px; margin-top: 8px; }
 legend { padding: 0 6px; }
+/* Summary and info */
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .small { opacity: 0.85; font-size: 12px; color: var(--muted); }
 .config-group { margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -177,6 +192,7 @@ legend { padding: 0 6px; }
 #dungeon .section-card { max-width: 1100px; margin: 0 auto 16px; }
 #roomGrid { margin: 0 auto; }
 
+/* Responsive tweaks */
 @media (min-width: 900px) {
   .game-root { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .dungeon-body { width: 100%; }

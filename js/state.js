@@ -1,3 +1,5 @@
+// state.js
+// Centralized game constants and mutable state shared across DailyDungeon modules.
 import { formatDateForEastern, getNextWeekdayDate } from './utils.js';
 
 export const todayStr = formatDateForEastern();

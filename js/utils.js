@@ -1,3 +1,5 @@
+// utils.js
+// Shared utility helpers for DOM queries, date handling in Eastern time, and grid sizing.
 export const qs = (sel) => document.querySelector(sel);
 export const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -50,4 +52,6 @@ export function getCellSizing() {
   return { cellSize, labelSize, labelHeight };
 }
 
-export function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+export function randomFrom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
